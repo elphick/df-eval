@@ -6,7 +6,7 @@ on pandas DataFrames.
 """
 
 import pandas as pd
-from typing import Any
+from typing import Any, Callable
 
 from df_eval.expr import Expression
 from df_eval.functions import BUILTIN_FUNCTIONS
@@ -47,7 +47,7 @@ class Engine:
         except Exception as e:
             raise ValueError(f"Failed to evaluate expression: {e}") from e
     
-    def register_function(self, name: str, func: callable) -> None:
+    def register_function(self, name: str, func: Callable[..., Any]) -> None:
         """
         Register a custom function for use in expressions.
         

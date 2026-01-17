@@ -19,7 +19,8 @@ def safe_divide(a: Any, b: Any) -> Any:
     Returns:
         The result of a / b, or NaN if b is zero.
     """
-    return np.divide(a, b, out=np.full_like(a, np.nan, dtype=float), where=(b != 0))
+    with np.errstate(divide='ignore', invalid='ignore'):
+        return np.where(b != 0, np.divide(a, b), np.nan)
 
 
 def coalesce(*args: Any) -> Any:
