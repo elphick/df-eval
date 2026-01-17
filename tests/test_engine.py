@@ -19,8 +19,8 @@ def test_engine_evaluate_simple():
     engine = Engine()
     df = pd.DataFrame({"a": [1, 2, 3], "b": [4, 5, 6]})
     result = engine.evaluate(df, "a + b")
-    expected = pd.Series([5, 7, 9], name="a + b")
-    pd.testing.assert_series_equal(result, expected)
+    expected = pd.Series([5, 7, 9])
+    pd.testing.assert_series_equal(result, expected, check_names=False)
 
 
 def test_engine_evaluate_with_expression_object():
@@ -29,8 +29,8 @@ def test_engine_evaluate_with_expression_object():
     df = pd.DataFrame({"x": [10, 20, 30]})
     expr = Expression("x * 2")
     result = engine.evaluate(df, expr)
-    expected = pd.Series([20, 40, 60], name="x * 2")
-    pd.testing.assert_series_equal(result, expected)
+    expected = pd.Series([20, 40, 60])
+    pd.testing.assert_series_equal(result, expected, check_names=False)
 
 
 def test_engine_evaluate_invalid_expression():

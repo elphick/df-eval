@@ -72,25 +72,7 @@ print(df_with_derived)
 api
 ```
 
-## API Reference
-
-### Engine
-
-```{eval-rst}
-.. autoclass:: df_eval.Engine
-   :members:
-   :special-members: __init__
-```
-
-### Expression
-
-```{eval-rst}
-.. autoclass:: df_eval.Expression
-   :members:
-   :special-members: __init__
-```
-
-### Built-in Functions
+## Built-in Functions
 
 The library provides several built-in functions:
 
