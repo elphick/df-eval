@@ -35,3 +35,12 @@
    :undoc-members:
    :show-inheritance:
 ```
+
+## Lookup Module
+
+```{eval-rst}
+.. automodule:: df_eval.lookup
+   :members:
+   :undoc-members:
+   :show-inheritance:
+```
