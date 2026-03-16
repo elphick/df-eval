@@ -1,47 +1,43 @@
-# API Reference
+API Reference
+=============
 
-## Core Modules
+Core Modules
+------------
 
-```{eval-rst}
 .. automodule:: df_eval
    :members:
    :undoc-members:
    :show-inheritance:
    :no-index:
-```
 
-## Expression Module
+Expression Module
+-----------------
 
-```{eval-rst}
 .. automodule:: df_eval.expr
    :members:
    :undoc-members:
    :show-inheritance:
-```
 
-## Engine Module
+Engine Module
+-------------
 
-```{eval-rst}
 .. automodule:: df_eval.engine
    :members:
    :undoc-members:
    :show-inheritance:
-```
 
-## Functions Module
+Functions Module
+----------------
 
-```{eval-rst}
 .. automodule:: df_eval.functions
    :members:
    :undoc-members:
    :show-inheritance:
-```
 
-## Lookup Module
+Lookup Module
+-------------
 
-```{eval-rst}
 .. automodule:: df_eval.lookup
    :members:
    :undoc-members:
    :show-inheritance:
-```
