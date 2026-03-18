@@ -6,13 +6,15 @@ on pandas DataFrames with support for UDF registry, schema-driven
 derived columns with topological ordering, and provenance tracking.
 """
 
+from collections.abc import Iterator, Sequence
+from pathlib import Path
+
 import pandas as pd
-import numpy as np
 from typing import Any, Callable, Dict, List, Optional, Set
-from collections import defaultdict
 
 from df_eval.expr import Expression
 from df_eval.functions import BUILTIN_FUNCTIONS
+from df_eval.parquet import iter_parquet_row_chunks, write_parquet_row_chunks
 
 
 class CycleDetectedError(Exception):
@@ -174,7 +176,160 @@ class Engine:
                 }
         
         return result
-    
+
+    def apply_pandera_schema(
+        self,
+        df: pd.DataFrame,
+        schema: Any,
+        **kwargs: Any,
+    ) -> pd.DataFrame:
+        """Apply a Pandera schema and derive df-eval columns from metadata.
+
+        This is a thin convenience wrapper around
+        ``df_eval.pandera.apply_pandera_schema`` that forwards the current
+        engine instance so registered functions/constants and provenance
+        settings are honored.
+        """
+        from df_eval.pandera import apply_pandera_schema
+
+        return apply_pandera_schema(df, schema, engine=self, **kwargs)
+
+    def iter_apply_schema_parquet_chunks(
+        self,
+        input_path: str | Path,
+        schema: Dict[str, str | Expression],
+        *,
+        dtypes: Optional[Dict[str, str]] = None,
+        chunk_size: int = 100_000,
+        input_columns: Sequence[str] | None = None,
+        output_columns: Sequence[str] | None = None,
+    ) -> Iterator[pd.DataFrame]:
+        """Yield transformed chunks from a Parquet file or dataset.
+
+        Args:
+            input_path: Source Parquet file or directory-backed dataset.
+            schema: Mapping of derived column names to expressions.
+            dtypes: Optional mapping of derived column names to pandas dtypes.
+            chunk_size: Maximum rows to scan and transform per chunk.
+            input_columns: Optional input column projection for scan efficiency.
+            output_columns: Optional ordered subset of output columns to keep.
+
+        Yields:
+            Transformed DataFrame chunks.
+        """
+        selected_output_columns = list(output_columns) if output_columns is not None else None
+
+        for chunk in iter_parquet_row_chunks(
+            input_path,
+            chunk_size=chunk_size,
+            columns=input_columns,
+        ):
+            transformed = self.apply_schema(chunk, schema, dtypes=dtypes)
+            if selected_output_columns is not None:
+                transformed = transformed.loc[:, selected_output_columns]
+            yield transformed
+
+    def apply_schema_parquet_to_df(
+        self,
+        input_path: str | Path,
+        schema: Dict[str, str | Expression],
+        *,
+        dtypes: Optional[Dict[str, str]] = None,
+        chunk_size: int = 100_000,
+        input_columns: Sequence[str] | None = None,
+        output_columns: Sequence[str] | None = None,
+    ) -> pd.DataFrame:
+        """Transform a Parquet dataset chunk-by-chunk and return one DataFrame.
+
+        Args:
+            input_path: Source Parquet file or directory-backed dataset.
+            schema: Mapping of derived column names to expressions.
+            dtypes: Optional mapping of derived column names to pandas dtypes.
+            chunk_size: Maximum rows to process per chunk.
+            input_columns: Optional input column projection for scan efficiency.
+            output_columns: Optional ordered subset of output columns to keep.
+
+        Returns:
+            A DataFrame containing all transformed rows. Returns an empty
+            DataFrame when the input yields no row chunks.
+        """
+        chunks = list(
+            self.iter_apply_schema_parquet_chunks(
+                input_path,
+                schema,
+                dtypes=dtypes,
+                chunk_size=chunk_size,
+                input_columns=input_columns,
+                output_columns=output_columns,
+            )
+        )
+        if not chunks:
+            return pd.DataFrame()
+        return pd.concat(chunks, ignore_index=True)
+
+    def apply_schema_parquet_to_parquet(
+        self,
+        input_path: str | Path,
+        output_path: str | Path,
+        schema: Dict[str, str | Expression],
+        *,
+        dtypes: Optional[Dict[str, str]] = None,
+        chunk_size: int = 100_000,
+        input_columns: Sequence[str] | None = None,
+        output_columns: Sequence[str] | None = None,
+        compression: str = "snappy",
+    ) -> Path:
+        """Transform a Parquet dataset chunk-by-chunk and write Parquet output.
+
+        This method is optimized for out-of-memory processing: source data is
+        streamed in row chunks, transformed with the same expression engine
+        used for in-memory DataFrames, and written incrementally to ``output_path``.
+
+        Args:
+            input_path: Source Parquet file or directory-backed dataset.
+            output_path: Destination Parquet file.
+            schema: Mapping of derived column names to expressions.
+            dtypes: Optional mapping of derived column names to pandas dtypes.
+            chunk_size: Maximum rows to process per chunk.
+            input_columns: Optional input column projection for scan efficiency.
+            output_columns: Optional ordered subset of output columns to keep.
+            compression: Parquet compression codec used for output.
+
+        Returns:
+            The normalized ``output_path``.
+        """
+        transformed_chunks = self.iter_apply_schema_parquet_chunks(
+            input_path,
+            schema,
+            dtypes=dtypes,
+            chunk_size=chunk_size,
+            input_columns=input_columns,
+            output_columns=output_columns,
+        )
+        return write_parquet_row_chunks(
+            transformed_chunks,
+            output_path,
+            compression=compression,
+        )
+
+    def apply_pandera_schema_parquet_to_parquet(
+        self,
+        input_path: str | Path,
+        output_path: str | Path,
+        schema: Any,
+        **kwargs: Any,
+    ) -> Path:
+        """Apply a Pandera schema to Parquet input and write Parquet output."""
+        from df_eval.pandera import apply_pandera_schema_parquet_to_parquet
+
+        return apply_pandera_schema_parquet_to_parquet(
+            input_path,
+            output_path,
+            schema,
+            engine=self,
+            **kwargs,
+        )
+
     def _topological_sort(
         self,
         expressions: Dict[str, Expression],

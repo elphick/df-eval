@@ -233,6 +233,45 @@ Register constants for use in expressions:
 
    result = engine.apply_schema(df, schema)
 
+Out-of-Memory Parquet Workflows
+-------------------------------
+
+For large datasets, you can keep memory usage bounded by streaming rows from
+Parquet input, applying schema logic chunk-by-chunk, and writing Parquet output.
+
+.. code-block:: python
+
+   from df_eval import Engine
+
+   engine = Engine()
+   schema = {
+       "line_total": "price * qty",
+       "line_total_with_fee": "line_total + 1.5",
+   }
+
+   # Fully out-of-memory: parquet in, parquet out
+   engine.apply_schema_parquet_to_parquet(
+       "input.parquet",
+       "output.parquet",
+       schema,
+       chunk_size=100_000,
+       input_columns=["price", "qty"],
+   )
+
+If you want to inspect the transformed result in-memory, use:
+
+.. code-block:: python
+
+   transformed_df = engine.apply_schema_parquet_to_df(
+       "input.parquet",
+       schema,
+       chunk_size=100_000,
+       input_columns=["price", "qty"],
+   )
+
+For a complete runnable walkthrough, see
+:doc:`../auto_examples/parquet_out_of_memory`.
+
 Engine Configuration
 --------------------
 
@@ -275,8 +314,67 @@ Create a copy of an engine with all its registered functions and constants:
 Performance Optimization
 ------------------------
 
+Pandera Integration
+-------------------
+
+If you use Pandera as your schema source of truth, you can attach df-eval
+expressions to per-column metadata and evaluate them through the engine.
+
+The convention is:
+
+- metadata key: ``metadata["df-eval"]``
+- expression key: ``metadata["df-eval"]["expr"]``
+
+Engine-first entry point
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Use ``Engine.apply_pandera_schema`` for discoverability and a centralized
+workflow:
+
+.. code-block:: python
+
+   import pandas as pd
+   import pandera.pandas as pa
+   from df_eval import Engine
+
+   schema = pa.DataFrameSchema(
+       {
+           "value": pa.Column(float, coerce=True),
+           "weight": pa.Column(float, coerce=True),
+           "weighted": pa.Column(
+               float,
+               coerce=True,
+               metadata={"df-eval": {"expr": "value * weight"}},
+           ),
+       }
+   )
+
+   df = pd.DataFrame({"value": ["10", "20"], "weight": ["0.5", "0.25"]})
+
+   engine = Engine()
+   result = engine.apply_pandera_schema(
+       df,
+       schema,
+       coerce=True,
+       validate=True,
+       validate_post=True,
+   )
+
+   # result includes derived column "weighted"
+
+Equivalent functional helper
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+If you prefer a functional style, use ``df_eval.pandera.apply_pandera_schema``:
+
+.. code-block:: python
+
+   from df_eval.pandera import apply_pandera_schema
+
+   result = apply_pandera_schema(df, schema, coerce=True, validate=True, validate_post=True)
+
 Batch Operations
-^^^^^^^^^^^^^^^^
+----------------
 
 Process multiple DataFrames with the same schema efficiently:
 
@@ -291,7 +389,7 @@ Process multiple DataFrames with the same schema efficiently:
    results = [engine.apply_schema(df, schema) for df in dataframes]
 
 Reusing Compiled Expressions
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+----------------------------
 
 The engine caches compiled expressions for better performance:
 

@@ -18,6 +18,7 @@ extensions = [
     "sphinx.ext.napoleon",
     "sphinx.ext.viewcode",
     "sphinx.ext.intersphinx",
+    "sphinx_gallery.gen_gallery",
     "sphinx_autodoc_typehints",
     "myst_parser",  # Keep for including README.md
 ]
@@ -74,3 +75,11 @@ myst_enable_extensions = [
     "deflist",
     "substitution",
 ]
+
+# Sphinx Gallery configuration
+sphinx_gallery_conf = {
+    "examples_dirs": ["examples"],
+    "gallery_dirs": ["auto_examples"],
+    "filename_pattern": r".*\.py",
+}
+

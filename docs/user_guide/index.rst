@@ -22,7 +22,7 @@ What You'll Learn
 -----------------
 
 - **Basic Usage**: Learn the fundamentals of expression evaluation and schema-driven transformations
-- **Advanced Usage**: Explore dependency management, provenance tracking, and custom functions
+- **Advanced Usage**: Explore dependency management, provenance tracking, custom functions, and Parquet streaming
 - **Lookups**: Master external data lookups and resolver patterns
 
 Quick Reference
@@ -56,3 +56,6 @@ Next Steps
 ----------
 
 Start with :doc:`basic_usage` to learn the fundamentals, then progress through the guide at your own pace.
+
+For runnable examples, see :doc:`../auto_examples/index`.
+

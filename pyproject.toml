@@ -22,6 +22,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+pandera = [
+    "pandera>=0.20.0",
+]
+parquet = [
+    "pyarrow>=15.0.0",
+]
+
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -29,6 +36,10 @@ dev = [
     "sphinx-book-theme>=1.0.0",
     "sphinx-autodoc-typehints>=1.24.0",
     "myst-parser>=2.0.0",
+    "sphinx-gallery>=0.16.0",
+    "matplotlib>=3.8.0",
+    "pandera>=0.20.0",
+    "pyarrow>=15.0.0",
 ]
 
 [build-system]
@@ -52,7 +63,7 @@ addopts = [
 ]
 
 [tool.coverage.run]
-source = ["src/df_eval"]
+source = ["df_eval"]
 branch = true
 
 [tool.coverage.report]
@@ -62,4 +73,9 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "raise AssertionError",
     "raise NotImplementedError",
+]
+
+[dependency-groups]
+dev = [
+    "sphinx-gallery>=0.20.0",
 ]
