@@ -1,12 +1,12 @@
 [project]
 name = "df-eval"
-version = "0.1.0"
+version = "0.1.1"
 description = "A lightweight expression evaluation engine for pandas DataFrames"
 readme = "README.md"
 requires-python = ">=3.11"
-license = {text = "MIT"}
+license = { text = "MIT" }
 authors = [
-    {name = "Greg Elphick"}
+    { name = "Greg Elphick" }
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -23,7 +23,9 @@ dependencies = [
 
 [project.optional-dependencies]
 pandera = [
-    "pandera>=0.20.0",
+    "pandera[io]>=0.20.0",
+    "black>=23.0.0",
+    "frictionless>=4.0.0",
 ]
 parquet = [
     "pyarrow>=15.0.0",

@@ -225,6 +225,74 @@ def df_eval_operations_from_pandera(
     return ops
 
 
+def load_pandera_schema_yaml(source: str | Path) -> Any:
+    """Load a Pandera DataFrameSchema from YAML, preserving column metadata.
+
+    This is a thin, public wrapper around df-eval's temporary fork of
+    ``pandera.io.pandas_io``. It exists to work around
+    https://github.com/unionai-oss/pandera/issues/1301, where column
+    ``metadata`` is not round-tripped by Pandera's YAML/JSON IO helpers.
+
+    Args:
+        source: Path to a YAML schema file or a YAML string.
+
+    Returns:
+        A Pandera :class:`~pandera.api.pandas.container.DataFrameSchema`.
+    """
+    _import_pandera()  # ensure the optional dependency is present with a clear error
+    from df_eval.utils import pandera_io_compat as _pa_io
+
+    return _pa_io.from_yaml(source)
+
+
+def dump_pandera_schema_yaml(schema: Any, stream: str | Path | None = None) -> str | None:
+    """Dump a Pandera DataFrameSchema to YAML, preserving column metadata.
+
+    This uses df-eval's temporary fork of ``pandera.io.pandas_io`` so that
+    column ``metadata`` survives a full IO round-trip. Once Pandera fixes
+    https://github.com/unionai-oss/pandera/issues/1301, this helper may be
+    simplified to delegate directly to Pandera's built-in IO.
+
+    Args:
+        schema: A Pandera SchemaModel/DataFrameModel class or DataFrameSchema.
+        stream: Optional path or file-like to write to. If ``None``, the
+            YAML representation is returned as a string.
+
+    Returns:
+        The YAML string if ``stream`` is ``None``, otherwise ``None``.
+    """
+    _import_pandera()
+    from df_eval.utils import pandera_io_compat as _pa_io
+
+    return _pa_io.to_yaml(schema, stream=stream)
+
+
+def load_pandera_schema_json(source: str | Path) -> Any:
+    """Load a Pandera DataFrameSchema from JSON, preserving column metadata.
+
+    This mirrors :func:`load_pandera_schema_yaml` but for JSON input.
+    """
+    _import_pandera()
+    from df_eval.utils import pandera_io_compat as _pa_io
+
+    return _pa_io.from_json(source)
+
+
+def dump_pandera_schema_json(schema: Any, target: str | Path | None = None, **kwargs: Any) -> str | None:
+    """Dump a Pandera DataFrameSchema to JSON, preserving column metadata.
+
+    Args:
+        schema: A Pandera SchemaModel/DataFrameModel class or DataFrameSchema.
+        target: Optional path or file-like to write to. If ``None``, the
+            JSON representation is returned as a string.
+        **kwargs: Extra keyword arguments forwarded to :func:`json.dump`.
+    """
+    _import_pandera()
+    from df_eval.utils import pandera_io_compat as _pa_io
+
+    return _pa_io.to_json(schema, target=target, **kwargs)
+
+
 def _plan_pandera_parquet_projection(
     schema: Any,
     *,
@@ -377,4 +445,8 @@ __all__ = [
     "apply_pandera_schema",
     "apply_pandera_schema_parquet_to_parquet",
     "df_eval_operations_from_pandera",
+    "load_pandera_schema_yaml",
+    "dump_pandera_schema_yaml",
+    "load_pandera_schema_json",
+    "dump_pandera_schema_json",
 ]

@@ -376,3 +376,55 @@ def test_apply_pandera_schema_with_lookup_and_function_metadata():
     assert list(result["line_total"]) == [15.0, 15.0, 18.75]
     assert list(result["discounted_total"]) == [13.5, 13.5, 16.875]
 
+
+def test_pandera_schema_yaml_roundtrip_preserves_metadata():
+    """YAML schema IO should preserve column metadata, including df-eval keys."""
+    from df_eval.pandera import (
+        load_pandera_schema_yaml,
+        dump_pandera_schema_yaml,
+    )
+
+    schema = pa.DataFrameSchema(
+        {
+            "value": pa.Column(float, metadata={"unit": "kg"}),
+            "double": pa.Column(
+                float,
+                metadata={"df-eval": {"expr": "2 * value"}, "unit": "kg"},
+            ),
+        }
+    )
+
+    yaml_text = dump_pandera_schema_yaml(schema)
+    loaded = load_pandera_schema_yaml(yaml_text)
+
+    # Generic metadata preserved
+    assert loaded.columns["value"].metadata == {"unit": "kg"}
+
+    # df-eval-specific metadata preserved and usable by our helpers
+    expr_map = df_eval_schema_from_pandera(loaded)
+    assert expr_map == {"double": "2 * value"}
+
+
+def test_pandera_schema_json_roundtrip_preserves_metadata():
+    """JSON schema IO should preserve column metadata, including df-eval keys."""
+    from df_eval.pandera import (
+        load_pandera_schema_json,
+        dump_pandera_schema_json,
+    )
+
+    schema = pa.DataFrameSchema(
+        {
+            "value": pa.Column(float, metadata={"unit": "kg"}),
+            "double": pa.Column(
+                float,
+                metadata={"df-eval": {"expr": "2 * value"}, "unit": "kg"},
+            ),
+        }
+    )
+
+    json_text = dump_pandera_schema_json(schema)
+    loaded = load_pandera_schema_json(json_text)
+
+    assert loaded.columns["value"].metadata == {"unit": "kg"}
+    expr_map = df_eval_schema_from_pandera(loaded)
+    assert expr_map == {"double": "2 * value"}
