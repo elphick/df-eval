@@ -28,6 +28,10 @@ pandera = [
 parquet = [
     "pyarrow>=15.0.0",
 ]
+all = [
+    "df-eval[pandera,parquet]",
+]
+
 
 dev = [
     "pytest>=7.0.0",

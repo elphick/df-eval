@@ -246,35 +246,42 @@ Control how missing values are handled:
    # Return the original key for missing values
    result = lookup(keys, resolver, on_missing="key")
 
-Using Lookups in Expressions
------------------------------
+Using Lookups in Pipelines
+--------------------------
 
-Integrate lookups into schema definitions:
+Integrate lookups into df-eval pipelines by combining resolvers with regular
+expressions. Lookups themselves are performed in Python using the helper
+function :func:`df_eval.lookup.lookup` or via Pandera metadata.
+
+Basic engine integration:
 
 .. code-block:: python
 
-   from df_eval import Engine
+   import pandas as pd
+   from df_eval import Engine, DictResolver, lookup
 
    # Setup resolver
    price_resolver = DictResolver({
        "apple": 1.50,
        "banana": 0.75,
-       "orange": 1.25
+       "orange": 1.25,
    })
 
-   # Register resolver with engine
    engine = Engine()
    engine.register_resolver("prices", price_resolver)
 
-   # Use in expressions
    df = pd.DataFrame({
        "product": ["apple", "banana", "orange"],
-       "quantity": [10, 20, 15]
+       "quantity": [10, 20, 15],
    })
 
+   # Perform lookups explicitly in Python
+   prices = lookup(df["product"], price_resolver, on_missing="null")
+   df = df.assign(price=prices)
+
+   # Then use df-eval expressions for arithmetic/boolean logic
    schema = {
-       "price": "lookup(product, prices)",
-       "total": "price * quantity"
+       "total": "price * quantity",
    }
 
    result = engine.apply_schema(df, schema)
@@ -307,14 +314,24 @@ Perform multiple lookups in sequence:
    engine.register_resolver("categories", category_resolver)
    engine.register_resolver("tax_rates", tax_rate_resolver)
 
-   # Chain lookups
+   # First lookup: product -> category
+   categories = lookup(df["product"], category_resolver, on_missing="key")
+   df = df.assign(category=categories)
+
+   # Second lookup: category -> tax rate
+   tax_rates = lookup(df["category"], tax_rate_resolver, on_missing="default")
+   df = df.assign(tax_rate=tax_rates)
+
+   # Now use df-eval expressions to compute derived values
    schema = {
-       "category": "lookup(product, categories)",
-       "tax_rate": "lookup(category, tax_rates)",
-       "price_with_tax": "price * (1 + tax_rate)"
+       "price_with_tax": "price * (1 + tax_rate)",
    }
 
    result = engine.apply_schema(df, schema)
+
+For metadata-driven pipelines that keep lookup configuration inside a Pandera
+schema, see :mod:`df_eval.pandera` and the
+:mod:`df_eval.docs.examples.lookup_pandera_pipeline` example.
 
 Batch Lookups
 -------------

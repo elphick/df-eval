@@ -145,6 +145,86 @@ def df_eval_schema_from_pandera(
     return expr_map
 
 
+def df_eval_operations_from_pandera(
+    schema: Any,
+    meta_key: str = "df-eval",
+) -> dict[str, dict[str, Any]]:
+    """Build a rich df-eval operations mapping from Pandera column metadata.
+
+    Each column may define one of the following under ``metadata[meta_key]``::
+
+        {"expr": "a + b"}
+        {"lookup": {"resolver": "prices", "key": "product"}}
+        {"function": {"name": "churn_model_v1", "inputs": ["age"]}}
+
+    The returned mapping has the shape::
+
+        {
+            "column_name": {
+                "kind": "expr" | "lookup" | "function",
+                "expr": str | None,
+                "lookup": dict | None,
+                "function": dict | None,
+            },
+        }
+    """
+    pa = _import_pandera()
+    df_schema = _to_dataframe_schema(schema, pa)
+
+    ops: dict[str, dict[str, Any]] = {}
+    for col_name, col_schema in df_schema.columns.items():
+        metadata = col_schema.metadata or {}
+        if not isinstance(metadata, Mapping):
+            continue
+
+        section = metadata.get(meta_key)
+        if section is None:
+            continue
+        if not isinstance(section, Mapping):
+            raise TypeError(
+                f"metadata['{meta_key}'] for column '{col_name}' must be a mapping"
+            )
+
+        if "expr" in section:
+            expr = section["expr"]
+            if not isinstance(expr, str):
+                raise TypeError(
+                    f"metadata['{meta_key}']['expr'] for column '{col_name}' must be a string"
+                )
+            ops[col_name] = {
+                "kind": "expr",
+                "expr": expr,
+                "lookup": None,
+                "function": None,
+            }
+        elif "lookup" in section:
+            lookup_spec = section["lookup"]
+            if not isinstance(lookup_spec, Mapping):
+                raise TypeError(
+                    f"metadata['{meta_key}']['lookup'] for column '{col_name}' must be a mapping"
+                )
+            ops[col_name] = {
+                "kind": "lookup",
+                "expr": None,
+                "lookup": dict(lookup_spec),
+                "function": None,
+            }
+        elif "function" in section:
+            function_spec = section["function"]
+            if not isinstance(function_spec, Mapping):
+                raise TypeError(
+                    f"metadata['{meta_key}']['function'] for column '{col_name}' must be a mapping"
+                )
+            ops[col_name] = {
+                "kind": "function",
+                "expr": None,
+                "lookup": None,
+                "function": dict(function_spec),
+            }
+
+    return ops
+
+
 def _plan_pandera_parquet_projection(
     schema: Any,
     *,
@@ -186,30 +266,45 @@ def apply_pandera_schema(
     schema: Any,
     *,
     meta_key: str = "df-eval",
-    expr_key: str = "expr",
     coerce: bool = True,
     validate: bool = True,
     validate_post: bool = True,
     engine: Engine | None = None,
     error_on_overwrite: bool = True,
 ) -> pd.DataFrame:
-    """Validate with Pandera, apply df-eval expressions, then optionally revalidate.
+    """Validate with Pandera, apply df-eval operations, then optionally revalidate.
 
-    Columns marked with metadata under ``meta_key`` are considered derived and are
-    excluded from pre-validation. This allows input frames that do not yet include
-    derived columns.
+    Columns that define df-eval metadata under ``meta_key`` are considered derived
+    and are excluded from pre-validation. This allows input frames that do not yet
+    include derived columns.
+
+    The df-eval metadata for each column may currently define exactly one of the
+    following keys:
+
+    ``{"expr": "a + b"}``
+    ``{"lookup": {"resolver": "prices", "key": "product"}}``
+    ``{"function": {"name": "my_fn", "inputs": ["a"], "outputs": ["y"]}}``
+
+    These are translated into an operations mapping consumed by
+    :meth:`df_eval.engine.Engine.apply_operations`.
     """
     pa = _import_pandera()
     df_schema = _to_dataframe_schema(schema, pa)
-    expr_map = df_eval_schema_from_pandera(df_schema, meta_key=meta_key, expr_key=expr_key)
-    derived_columns = set(expr_map)
+
+    # Build a rich operations map (expr, lookup, function) from column metadata.
+    from df_eval.pandera import df_eval_operations_from_pandera
+
+    operations = df_eval_operations_from_pandera(df_schema, meta_key=meta_key)
+    derived_columns = set(operations)
 
     validated_df = df
     if validate:
         base_schema = _build_subset_schema(df_schema, derived_columns)
         validated_df = _validate_with_coerce(base_schema, df, coerce=coerce)
 
-    if not expr_map:
+    # If there are no df-eval-driven columns, there is nothing for the engine to do.
+    # Mirror previous behaviour and skip post-validation in this case.
+    if not operations:
         return validated_df
 
     if error_on_overwrite:
@@ -222,7 +317,7 @@ def apply_pandera_schema(
             )
 
     eval_engine = engine or Engine()
-    result = eval_engine.apply_schema(validated_df, expr_map)
+    result = eval_engine.apply_operations(validated_df, operations)
 
     if validate and validate_post:
         result = _validate_with_coerce(df_schema, result, coerce=coerce)
@@ -281,5 +376,5 @@ __all__ = [
     "df_eval_schema_from_pandera",
     "apply_pandera_schema",
     "apply_pandera_schema_parquet_to_parquet",
+    "df_eval_operations_from_pandera",
 ]
-

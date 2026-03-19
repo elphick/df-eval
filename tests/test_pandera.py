@@ -213,3 +213,166 @@ def test_engine_apply_pandera_schema_parquet_to_parquet_writes_schema_order(tmp_
     assert list(output_df["scaled"]) == [40, 60]
 
 
+def test_df_eval_operations_from_pandera_extracts_kinds():
+    """df_eval_operations_from_pandera should detect expr, lookup, and function kinds."""
+    schema = pa.DataFrameSchema(
+        {
+            "value": pa.Column(
+                float,
+                metadata={"df-eval": {"expr": "2 * base"}},
+            ),
+            "price": pa.Column(
+                float,
+                metadata={
+                    "df-eval": {
+                        "lookup": {
+                            "resolver": "prices",
+                            "key": "product",
+                            "on_missing": "null",
+                        }
+                    }
+                },
+            ),
+            "score": pa.Column(
+                float,
+                metadata={
+                    "df-eval": {
+                        "function": {
+                            "name": "dummy_fn",
+                            "inputs": ["a"],
+                            "outputs": ["score"],
+                        }
+                    }
+                },
+            ),
+        }
+    )
+
+    from df_eval.pandera import df_eval_operations_from_pandera
+
+    ops = df_eval_operations_from_pandera(schema)
+
+    assert ops["value"]["kind"] == "expr"
+    assert ops["value"]["expr"] == "2 * base"
+    assert ops["price"]["kind"] == "lookup"
+    assert ops["price"]["lookup"]["resolver"] == "prices"
+    assert ops["score"]["kind"] == "function"
+    assert ops["score"]["function"]["name"] == "dummy_fn"
+
+
+def test_engine_pipeline_function_roundtrip():
+    """Engine.register_pipeline_function can be used by metadata-driven ops."""
+    schema = pa.DataFrameSchema(
+        {
+            "a": pa.Column(int),
+            "b": pa.Column(int),
+            "sum_via_fn": pa.Column(
+                int,
+                metadata={
+                    "df-eval": {
+                        "function": {
+                            "name": "add_columns",
+                            "inputs": ["a", "b"],
+                            "outputs": ["sum_via_fn"],
+                        }
+                    }
+                },
+            ),
+        }
+    )
+
+    df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+
+    # Simple pipeline function that adds two columns
+    def add_columns(df_slice: pd.DataFrame) -> pd.Series:
+        return df_slice["a"] + df_slice["b"]
+
+    from df_eval.pandera import df_eval_operations_from_pandera
+
+    engine = Engine()
+    engine.register_pipeline_function("add_columns", add_columns)
+
+    ops = df_eval_operations_from_pandera(schema)
+
+    # Manually drive the operation using the private helper for now
+    spec = ops["sum_via_fn"]["function"]
+    result = engine._apply_pipeline_function(df, spec)
+
+    assert list(result["sum_via_fn"]) == [4, 6]
+
+
+def test_apply_pandera_schema_with_lookup_and_function_metadata():
+    """apply_pandera_schema should honor lookup and function operations end-to-end."""
+    from df_eval.lookup import DictResolver
+
+    schema = pa.DataFrameSchema(
+        {
+            "product": pa.Column(str),
+            "quantity": pa.Column(int),
+            "price": pa.Column(
+                float,
+                metadata={
+                    "df-eval": {
+                        "lookup": {
+                            "resolver": "prices",
+                            "key": "product",
+                            "on_missing": "null",
+                        }
+                    }
+                },
+            ),
+            "line_total": pa.Column(
+                float,
+                metadata={"df-eval": {"expr": "price * quantity"}},
+            ),
+            "discounted_total": pa.Column(
+                float,
+                metadata={
+                    "df-eval": {
+                        "function": {
+                            "name": "apply_discount",
+                            "inputs": ["line_total"],
+                            "outputs": ["discounted_total"],
+                            "params": {"rate": 0.1},
+                        }
+                    }
+                },
+            ),
+        }
+    )
+
+    df = pd.DataFrame(
+        {
+            "product": ["apple", "banana", "orange"],
+            "quantity": [10, 20, 15],
+        }
+    )
+
+    price_resolver = DictResolver(
+        {
+            "apple": 1.50,
+            "banana": 0.75,
+            "orange": 1.25,
+        }
+    )
+
+    def apply_discount(df_slice: pd.DataFrame, *, rate: float) -> pd.Series:
+        return df_slice["line_total"] * (1 - rate)
+
+    engine = Engine()
+    engine.register_resolver("prices", price_resolver)
+    engine.register_pipeline_function("apply_discount", apply_discount)
+
+    result = apply_pandera_schema(
+        df,
+        schema,
+        engine=engine,
+        coerce=True,
+        validate=True,
+        validate_post=True,
+    )
+
+    assert list(result["price"]) == [1.5, 0.75, 1.25]
+    assert list(result["line_total"]) == [15.0, 15.0, 18.75]
+    assert list(result["discounted_total"]) == [13.5, 13.5, 16.875]
+
