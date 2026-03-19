@@ -1,5 +1,9 @@
 # df-eval
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/elphick/df-eval/main/docs/_static/branding/df-eval-icon.svg" alt="df-eval icon" width="120" />
+</p>
+
 [![CI](https://github.com/elphick/df-eval/actions/workflows/ci.yml/badge.svg)](https://github.com/elphick/df-eval/actions/workflows/ci.yml)
 [![Documentation](https://github.com/elphick/df-eval/actions/workflows/docs.yml/badge.svg)](https://github.com/elphick/df-eval/actions/workflows/docs.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)

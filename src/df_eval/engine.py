@@ -130,7 +130,7 @@ class Engine:
             # like variables in the expression namespace.
             result = df.eval(
                 expr.expr_str,
-                resolvers=[self.constants],
+                resolvers=[self.constants, self.functions],
             )
             
             # Apply dtype cast if specified

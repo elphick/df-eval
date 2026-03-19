@@ -22,7 +22,7 @@ from df_eval.pandera import apply_pandera_schema
 
 # %%
 # Define Pandera Schema with df-eval Metadata
-# ------------------------------------------
+# -------------------------------------------
 #
 # ``price`` is driven by a lookup spec that references a named resolver.
 # ``discounted_total`` is driven by a generic function step that calls a
@@ -85,7 +85,7 @@ df
 
 # %%
 # Register Resolver and Pipeline Function
-# --------------------------------------
+# ---------------------------------------
 #
 # The resolver provides prices by product, while the pipeline function
 # applies a simple percentage discount to ``line_total``.

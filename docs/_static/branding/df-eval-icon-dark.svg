@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="196" height="196" viewBox="0 0 196 196" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title">
+  <title>df-eval — f(x) adds columns (rows fixed, 2→3 columns, equal widths) — DARK</title>
+
+  <!-- PALETTE -->
+  <!-- bg: #0f172a, grid: #94a3b8, arrow: #60a5fa, accent: #4ade80 -->
+
+  <!-- Background -->
+  <rect x="0" y="0" width="196" height="196" rx="28" fill="#0f172a"/>
+
+  <!-- LEFT TABLE -->
+  <g transform="translate(22,64)">
+    <rect x="0" y="0" width="60" height="108" rx="10" fill="none" stroke="#94a3b8" stroke-width="6" stroke-linejoin="round"/>
+    <line x1="0" y1="27" x2="60" y2="27" stroke="#94a3b8" stroke-width="6" stroke-linecap="round"/>
+    <line x1="0" y1="54" x2="60" y2="54" stroke="#94a3b8" stroke-width="6" stroke-linecap="round"/>
+    <line x1="0" y1="81" x2="60" y2="81" stroke="#94a3b8" stroke-width="6" stroke-linecap="round"/>
+    <line x1="30" y1="0" x2="30" y2="108" stroke="#94a3b8" stroke-width="6" stroke-linecap="round"/>
+  </g>
+
+  <!-- RIGHT TABLE -->
+  <g transform="translate(94,64)">
+    <rect x="0" y="0" width="90" height="108" rx="10" fill="none" stroke="#94a3b8" stroke-width="6" stroke-linejoin="round"/>
+    <clipPath id="clipRightStaticDark">
+      <rect x="3" y="3" width="84" height="102" rx="7"/>
+    </clipPath>
+    <g clip-path="url(#clipRightStaticDark)">
+      <rect x="60" y="0" width="30" height="108" fill="#4ade80"/>
+    </g>
+    <line x1="0" y1="27" x2="90" y2="27" stroke="#94a3b8" stroke-width="6" stroke-linecap="round"/>
+    <line x1="0" y1="54" x2="90" y2="54" stroke="#94a3b8" stroke-width="6" stroke-linecap="round"/>
+    <line x1="0" y1="81" x2="90" y2="81" stroke="#94a3b8" stroke-width="6" stroke-linecap="round"/>
+    <line x1="30" y1="0" x2="30" y2="108" stroke="#94a3b8" stroke-width="6" stroke-linecap="round"/>
+    <line x1="60" y1="0" x2="60" y2="108" stroke="#94a3b8" stroke-width="6" stroke-linecap="round"/>
+  </g>
+
+  <!-- Arc + arrowhead -->
+  <path d="M52,64 C52,6 139,6 139,64" fill="none" stroke="#60a5fa" stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M139,64 L133,54 M139,64 L145,54" fill="none" stroke="#60a5fa" stroke-width="4.5" stroke-linecap="round"/>
+
+  <!-- Label -->
+  <text x="96" y="50" font-size="26" text-anchor="middle" font-family="Segoe UI, Inter, Helvetica Neue, Arial, sans-serif" font-weight="700" fill="#60a5fa">f(x)</text>
+</svg>

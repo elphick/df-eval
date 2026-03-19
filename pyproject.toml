@@ -81,5 +81,6 @@ exclude_lines = [
 
 [dependency-groups]
 dev = [
+    "cairosvg>=2.9.0",
     "sphinx-gallery>=0.20.0",
 ]

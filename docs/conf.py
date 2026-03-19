@@ -37,6 +37,10 @@ html_theme = "sphinx_book_theme"
 html_static_path = ["_static"]
 html_title = "df-eval Documentation"
 
+# Use project branding (icons) for the docs
+html_logo = "_static/branding/df-eval-icon.svg"
+html_favicon = "_static/branding/df-eval-icon.svg"
+
 html_theme_options = {
     "repository_url": "https://github.com/elphick/df-eval",
     "use_repository_button": True,
@@ -44,7 +48,14 @@ html_theme_options = {
     "use_edit_page_button": True,
     "path_to_docs": "docs",
     "repository_branch": "main",
+    "logo": {
+        "image_light": "_static/branding/df-eval-icon-light.svg",
+        "image_dark": "_static/branding/df-eval-icon-dark.svg",
+        "text": f"df-eval<br>({release})",  # shows version in the top-left
+
+    },
 }
+
 
 # -- Extension configuration -------------------------------------------------
 

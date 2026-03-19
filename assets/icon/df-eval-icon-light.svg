@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="196" height="196" viewBox="0 0 196 196" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title">
+  <title>df-eval — f(x) adds columns (rows fixed, 2→3 columns, equal widths) — LIGHT</title>
+
+  <!-- PALETTE -->
+  <!-- bg: #ffffff, grid: #334155, arrow: #2563eb, accent: #22c55e -->
+
+  <!-- Background -->
+  <rect x="0" y="0" width="196" height="196" rx="28" fill="#ffffff"/>
+
+  <!-- LEFT TABLE (2 cols × 4 rows) at (22,64), 60×108 -->
+  <g transform="translate(22,64)">
+    <!-- Frame: explicit fill="none" so rasterizers don't fill black -->
+    <rect x="0" y="0" width="60" height="108" rx="10" fill="none" stroke="#334155" stroke-width="6" stroke-linejoin="round"/>
+    <!-- Rows -->
+    <line x1="0" y1="27" x2="60" y2="27" stroke="#334155" stroke-width="6" stroke-linecap="round"/>
+    <line x1="0" y1="54" x2="60" y2="54" stroke="#334155" stroke-width="6" stroke-linecap="round"/>
+    <line x1="0" y1="81" x2="60" y2="81" stroke="#334155" stroke-width="6" stroke-linecap="round"/>
+    <!-- Col divider -->
+    <line x1="30" y1="0" x2="30" y2="108" stroke="#334155" stroke-width="6" stroke-linecap="round"/>
+  </g>
+
+  <!-- RIGHT TABLE (3 cols × 4 rows) at (94,64), 90×108 -->
+  <g transform="translate(94,64)">
+    <!-- Outer frame -->
+    <rect x="0" y="0" width="90" height="108" rx="10" fill="none" stroke="#334155" stroke-width="6" stroke-linejoin="round"/>
+    <!-- Clip for inner content so the green column preserves rounded corners -->
+    <clipPath id="clipRightStaticLight">
+      <rect x="3" y="3" width="84" height="102" rx="7"/>
+    </clipPath>
+
+    <!-- Green new column (rightmost third = 30px) -->
+    <g clip-path="url(#clipRightStaticLight)">
+      <rect x="60" y="0" width="30" height="108" fill="#22c55e"/>
+    </g>
+
+    <!-- Row dividers across full width (including green) -->
+    <line x1="0" y1="27" x2="90" y2="27" stroke="#334155" stroke-width="6" stroke-linecap="round"/>
+    <line x1="0" y1="54" x2="90" y2="54" stroke="#334155" stroke-width="6" stroke-linecap="round"/>
+    <line x1="0" y1="81" x2="90" y2="81" stroke="#334155" stroke-width="6" stroke-linecap="round"/>
+
+    <!-- Col dividers (3 equal columns at 30, 60) -->
+    <line x1="30" y1="0" x2="30" y2="108" stroke="#334155" stroke-width="6" stroke-linecap="round"/>
+    <line x1="60" y1="0" x2="60" y2="108" stroke="#334155" stroke-width="6" stroke-linecap="round"/>
+  </g>
+
+  <!-- High, thin arc: centre-top (left) → centre-top (right) -->
+  <!-- Start (52,64), End (139,64), controls y=6; arrow points DOWN -->
+  <path d="M52,64 C52,6 139,6 139,64" fill="none" stroke="#2563eb" stroke-width="4.5" stroke-linecap="round"/>
+  <!-- Downward arrowhead at end -->
+  <path d="M139,64 L133,54 M139,64 L145,54" fill="none" stroke="#2563eb" stroke-width="4.5" stroke-linecap="round"/>
+
+  <!-- f(x) label inside the arc -->
+  <text x="96" y="50" font-size="26" text-anchor="middle" font-family="Segoe UI, Inter, Helvetica Neue, Arial, sans-serif" font-weight="700" fill="#2563eb">f(x)</text>
+</svg>

@@ -39,6 +39,10 @@ The ``lookup`` function resolves values using a resolver:
    prices = lookup(products, resolver, on_missing="null")
    print(prices)  # [1.50, 0.75, None]
 
+For a complete, runnable walkthrough that combines lookups with
+expression evaluation, see the example
+:ref:`sphx_glr_auto_examples_lookup_engine_integration.py`.
+
 Resolver Types
 --------------
 
@@ -290,6 +294,13 @@ Basic engine integration:
    # 0   apple        10   1.50  15.00
    # 1  banana        20   0.75  15.00
    # 2  orange        15   1.25  18.75
+
+See also the gallery example
+:ref:`sphx_glr_auto_examples_lookup_engine_integration.py` for a
+slightly more complete pipeline using in-memory resolvers, and
+:ref:`sphx_glr_auto_examples_lookup_pandera_pipeline.py` for an
+end-to-end pipeline that stores lookup configuration in a Pandera
+schema.
 
 Chaining Lookups
 ----------------

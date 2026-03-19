@@ -18,6 +18,20 @@ Guide Contents
    advanced_usage
    lookups
 
+Featured Examples
+-----------------
+
+The following gallery examples provide end-to-end, runnable walkthroughs
+of common df-eval workflows:
+
+.. toctree::
+   :maxdepth: 1
+
+   ../auto_examples/lookup_engine_integration
+   ../auto_examples/pandera_integration
+   ../auto_examples/lookup_pandera_pipeline
+   ../auto_examples/parquet_out_of_memory
+
 What You'll Learn
 -----------------
 
