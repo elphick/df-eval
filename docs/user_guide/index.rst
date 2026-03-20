@@ -18,11 +18,25 @@ Guide Contents
    advanced_usage
    lookups
 
+Featured Examples
+-----------------
+
+The following gallery examples provide end-to-end, runnable walkthroughs
+of common df-eval workflows:
+
+.. toctree::
+   :maxdepth: 1
+
+   ../auto_examples/lookup_engine_integration
+   ../auto_examples/pandera_integration
+   ../auto_examples/lookup_pandera_pipeline
+   ../auto_examples/parquet_out_of_memory
+
 What You'll Learn
 -----------------
 
 - **Basic Usage**: Learn the fundamentals of expression evaluation and schema-driven transformations
-- **Advanced Usage**: Explore dependency management, provenance tracking, and custom functions
+- **Advanced Usage**: Explore dependency management, provenance tracking, custom functions, and Parquet streaming
 - **Lookups**: Master external data lookups and resolver patterns
 
 Quick Reference
@@ -56,3 +70,6 @@ Next Steps
 ----------
 
 Start with :doc:`basic_usage` to learn the fundamentals, then progress through the guide at your own pace.
+
+For runnable examples, see :doc:`../auto_examples/index`.
+

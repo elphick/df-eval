@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="196" height="196" viewBox="0 0 196 196" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title">
+  <title>df-eval — f(x) adds columns (rows fixed, 2→3 columns, equal widths)</title>
+
+  <!-- Theme tokens -->
+  <style>
+    :root{
+      --bg:#ffffff;
+      --grid:#334155;    /* slate-700 */
+      --arrow:#2563eb;   /* blue-600 */
+      --accent:#22c55e;  /* green-500 */
+    }
+    @media (prefers-color-scheme: dark){
+      :root{
+        --bg:#0f172a;    /* slate-900 */
+        --grid:#94a3b8;  /* slate-300 */
+        --arrow:#60a5fa; /* blue-300 */
+        --accent:#4ade80;/* green-300 */
+      }
+    }
+    .frame{ fill:none; stroke:var(--grid); stroke-width:6; stroke-linejoin:round; }
+    .grid{ stroke:var(--grid); stroke-width:6; stroke-linecap:round; }
+    .arrow{ stroke:var(--arrow); stroke-width:4.5; stroke-linecap:round; fill:none; }
+    .accentFill{ fill:var(--accent); stroke:var(--accent); stroke-width:0; }
+    text{ fill:var(--arrow); font-family:"Segoe UI","Inter","Helvetica Neue",Arial,sans-serif; font-weight:700; }
+  </style>
+
+  <!-- Background -->
+  <rect x="0" y="0" width="196" height="196" rx="28" fill="var(--bg)"/>
+
+  <!-- Layout constants
+       Left table:  xL=22,  wL=60 (2 cols → 30 each)
+       Gap:         12
+       Right table: xR=94,  wR=90 (3 cols → 30 each)  == 1.5 * wL
+       Both tables: y=64, h=108  → row lines at 27, 54, 81 (i.e., Y=91,118,145)
+       Arc: from centre-top of left (52,64) to centre-top of right (139,64),
+            high arch with control Y = 6 for clear headroom; arrowhead points DOWN.
+    -->
+  <!-- LEFT TABLE (2 cols × 4 rows) -->
+  <g id="left" transform="translate(22,64)">
+    <rect x="0" y="0" width="60" height="108" rx="10" class="frame"/>
+    <!-- rows -->
+    <line x1="0" y1="27" x2="60" y2="27" class="grid"/>
+    <line x1="0" y1="54" x2="60" y2="54" class="grid"/>
+    <line x1="0" y1="81" x2="60" y2="81" class="grid"/>
+    <!-- columns -->
+    <line x1="30" y1="0" x2="30" y2="108" class="grid"/>
+  </g>
+
+  <!-- RIGHT TABLE (3 cols × 4 rows; last column highlighted) -->
+  <g id="right" transform="translate(94,64)">
+    <!-- outer frame -->
+    <rect x="0" y="0" width="90" height="108" rx="10" class="frame"/>
+    <!-- inner clip so green preserves rounded corners -->
+    <clipPath id="clipRight">
+      <rect x="3" y="3" width="84" height="102" rx="7"/>
+    </clipPath>
+
+    <!-- green new column (rightmost third: 30px) -->
+    <g clip-path="url(#clipRight)">
+      <rect x="60" y="0" width="30" height="108" class="accentFill"/>
+    </g>
+
+    <!-- row dividers across full width (incl. green) -->
+    <line x1="0" y1="27" x2="90" y2="27" class="grid"/>
+    <line x1="0" y1="54" x2="90" y2="54" class="grid"/>
+    <line x1="0" y1="81" x2="90" y2="81" class="grid"/>
+
+    <!-- column dividers (3 equal columns) -->
+    <line x1="30" y1="0" x2="30" y2="108" class="grid"/>
+    <line x1="60" y1="0" x2="60" y2="108" class="grid"/>
+  </g>
+
+  <!-- High, thin arc: centre-top (left) → centre-top (right) -->
+  <!-- Start: (52,64)  End: (139,64)  Controls raised to y=6 to open space for f(x) -->
+  <g id="flow">
+    <path d="M52,64 C52,6 139,6 139,64" class="arrow"/>
+    <!-- Downward arrowhead at end (apex at 139,64; chevrons above it so tip faces DOWN) -->
+    <path d="M139,64 L133,54 M139,64 L145,54" class="arrow"/>
+  </g>
+
+  <!-- f(x) label, centered inside the arc without intersecting -->
+  <text x="96" y="50" font-size="26" text-anchor="middle">f(x)</text>
+</svg>

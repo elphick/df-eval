@@ -6,15 +6,10 @@ Documentation
 
 .. toctree::
    :maxdepth: 2
-   :caption: User Guide
 
-   user_guide/index
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Reference
-
-   reference/api
+   User Guide <user_guide/index>
+   API Reference <reference/api>
+   Examples <auto_examples/index>
 
 Indices and tables
 ==================

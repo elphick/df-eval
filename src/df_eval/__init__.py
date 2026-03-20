@@ -18,6 +18,16 @@ from df_eval.lookup import (
     DatabaseResolver,
     HTTPResolver,
 )
+from df_eval.pandera import (
+    df_eval_schema_from_pandera,
+    apply_pandera_schema,
+    apply_pandera_schema_parquet_to_parquet,
+    load_pandera_schema_yaml,
+    dump_pandera_schema_yaml,
+    load_pandera_schema_json,
+    dump_pandera_schema_json,
+)
+from df_eval.parquet import iter_parquet_row_chunks, write_parquet_row_chunks
 
 __all__ = [
     "Engine",
@@ -30,5 +40,14 @@ __all__ = [
     "FileResolver",
     "DatabaseResolver",
     "HTTPResolver",
+    "df_eval_schema_from_pandera",
+    "apply_pandera_schema",
+    "apply_pandera_schema_parquet_to_parquet",
+    "load_pandera_schema_yaml",
+    "dump_pandera_schema_yaml",
+    "load_pandera_schema_json",
+    "dump_pandera_schema_json",
+    "iter_parquet_row_chunks",
+    "write_parquet_row_chunks",
     "__version__",
 ]

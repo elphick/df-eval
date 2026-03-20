@@ -55,13 +55,10 @@ Define multiple derived columns at once using a schema dictionary:
 
    # Apply the schema to create new columns
    df_with_derived = engine.apply_schema(df, schema)
-   print(df_with_derived)
-   #    a  b  sum  product  ratio
-   # 0  1  4    5        4   0.25
-   # 1  2  5    7       10   0.40
-   # 2  3  6    9       18   0.50
 
-The ``apply_schema`` method returns a new DataFrame with the derived columns added.
+The ``apply_schema`` method returns a new DataFrame with the derived columns
+added. For a fuller, runnable walkthrough of schema-driven derived columns,
+see the example :ref:`sphx_glr_auto_examples_basic_engine_usage.py`.
 
 Using Built-in Functions
 -------------------------
@@ -180,18 +177,21 @@ Evaluate multiple independent expressions at once:
 Specifying Data Types
 ----------------------
 
-Control the output type of derived columns:
+Control the output type of derived columns using the ``dtypes`` argument to
+:meth:`df_eval.Engine.apply_schema`:
 
 .. code-block:: python
 
-   from df_eval import ColumnSpec
-
    schema = {
-       "float_sum": ColumnSpec("a + b", dtype="float64"),
-       "int_product": ColumnSpec("a * b", dtype="int32")
+       "float_sum": "a + b",
+       "int_product": "a * b"
    }
 
-   result = engine.apply_schema(df, schema)
+   result = engine.apply_schema(
+       df,
+       schema,
+       dtypes={"float_sum": "float64", "int_product": "int32"},
+   )
    print(result.dtypes)
 
 Error Handling
@@ -202,10 +202,13 @@ df-eval validates expressions and provides clear error messages:
 .. code-block:: python
 
    try:
-       # This will fail - column 'z' doesn't exist
-       result = engine.evaluate(df, "z + 1")
-   except Exception as e:
-       print(f"Error: {e}")
+        # This will fail - column 'z' doesn't exist
+        result = engine.evaluate(df, "z + 1")
+    except Exception as e:
+        print(f"Error: {e}")
+
+For a deeper tour of common error cases and debugging techniques, see the
+gallery example :ref:`sphx_glr_auto_examples_error_handling_and_debugging.py`.
 
 Next Steps
 ----------

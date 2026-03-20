@@ -41,3 +41,19 @@ Lookup Module
    :members:
    :undoc-members:
    :show-inheritance:
+
+Pandera Module
+--------------
+
+.. automodule:: df_eval.pandera
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+Parquet Module
+--------------
+
+.. automodule:: df_eval.parquet
+   :members:
+   :undoc-members:
+   :show-inheritance:

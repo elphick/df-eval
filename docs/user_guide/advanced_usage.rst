@@ -233,79 +233,136 @@ Register constants for use in expressions:
 
    result = engine.apply_schema(df, schema)
 
-Engine Configuration
---------------------
+Out-of-Memory Parquet Workflows
+-------------------------------
 
-Creating Multiple Engines
-^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-You can create multiple engines with different configurations:
+For large datasets, you can keep memory usage bounded by streaming rows from
+Parquet input, applying schema logic chunk-by-chunk, and writing Parquet output.
 
 .. code-block:: python
 
-   # Engine for financial calculations
-   financial_engine = Engine()
-   financial_engine.register_constant("TAX_RATE", 0.07)
-   financial_engine.register_constant("INTEREST_RATE", 0.05)
+   from df_eval import Engine
 
-   # Engine for scientific calculations
-   science_engine = Engine()
-   science_engine.register_constant("G", 9.81)  # gravity
-   science_engine.register_constant("C", 299792458)  # speed of light
-
-Copying Engines
-^^^^^^^^^^^^^^^
-
-Create a copy of an engine with all its registered functions and constants:
-
-.. code-block:: python
-
-   # Create base engine with common functions
-   base_engine = Engine()
-   base_engine.register_function("custom_func", my_func)
-   base_engine.register_constant("CONSTANT", 42)
-
-   # Create specialized engines from base
-   engine1 = base_engine.copy()
-   engine1.register_constant("SPECIFIC_PARAM", 1.5)
-
-   engine2 = base_engine.copy()
-   engine2.register_constant("SPECIFIC_PARAM", 2.5)
-
-Performance Optimization
-------------------------
-
-Batch Operations
-^^^^^^^^^^^^^^^^
-
-Process multiple DataFrames with the same schema efficiently:
-
-.. code-block:: python
-
+   engine = Engine()
    schema = {
-       "derived": "a * 2 + b"
+       "line_total": "price * qty",
+       "line_total_with_fee": "line_total + 1.5",
    }
 
-   # Process multiple DataFrames
-   dataframes = [df1, df2, df3]
-   results = [engine.apply_schema(df, schema) for df in dataframes]
+   # Fully out-of-memory: parquet in, parquet out
+   engine.apply_schema_parquet_to_parquet(
+       "input.parquet",
+       "output.parquet",
+       schema,
+       chunk_size=100_000,
+       input_columns=["price", "qty"],
+   )
 
-Reusing Compiled Expressions
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-The engine caches compiled expressions for better performance:
+If you want to inspect the transformed result in-memory, use:
 
 .. code-block:: python
 
-   # First evaluation compiles the expression
-   result1 = engine.evaluate(df1, "a + b * 2")
+   transformed_df = engine.apply_schema_parquet_to_df(
+       "input.parquet",
+       schema,
+       chunk_size=100_000,
+       input_columns=["price", "qty"],
+   )
 
-   # Subsequent evaluations with the same expression are faster
-   result2 = engine.evaluate(df2, "a + b * 2")
-   result3 = engine.evaluate(df3, "a + b * 2")
+For a complete runnable walkthrough, see
+:doc:`../auto_examples/parquet_out_of_memory`.
 
-Next Steps
-----------
+Pandera Integration and Schema IO
+---------------------------------
 
-- Learn about :doc:`lookups` for integrating external data sources
-- Check the :doc:`../reference/api` for complete documentation
+df-eval integrates with `Pandera <https://pandera.readthedocs.io/>`_ to drive
+schema-based derived columns from Pandera ``DataFrameSchema`` objects or
+SchemaModel/DataFrameModel classes.
+
+The :mod:`df_eval.pandera` module understands per-column metadata and can
+translate it into df-eval operations. For example, you can attach a df-eval
+expression directly to a Pandera column:
+
+.. code-block:: python
+
+   import pandas as pd
+   import pandera as pa
+
+   from df_eval import Engine
+   from df_eval.pandera import apply_pandera_schema
+
+   schema = pa.DataFrameSchema(
+       {
+           "a": pa.Column(int),
+           "b": pa.Column(int),
+           "sum": pa.Column(
+               int,
+               metadata={"df-eval": {"expr": "a + b"}},
+           ),
+       }
+   )
+
+   df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+
+   engine = Engine()
+   result = apply_pandera_schema(df, schema)
+   print(result["sum"].tolist())  # [4, 6]
+
+Pandera Schema IO with Metadata Preservation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Pandera currently has an open issue (`https://github.com/unionai-oss/pandera/issues/1301 <https://github.com/unionai-oss/pandera/issues/1301>`_)
+where column ``metadata`` is not preserved when using its built-in YAML/JSON
+IO helpers. This is important for df-eval because column metadata is where
+we store df-eval expressions and other operation specs.
+
+To work around this, df-eval ships a small compatibility layer that mirrors
+``pandera.io.pandas_io`` but ensures that column ``metadata`` is included in
+schema statistics and survives IO round-trips. You typically don't need to
+import this compat layer directly; instead, use the public helpers in
+:mod:`df_eval.pandera`:
+
+.. code-block:: python
+
+   from pathlib import Path
+
+   import pandera as pa
+   from df_eval.pandera import (
+       load_pandera_schema_yaml,
+       dump_pandera_schema_yaml,
+       df_eval_schema_from_pandera,
+   )
+
+   # Define a schema with df-eval metadata
+   schema = pa.DataFrameSchema(
+       {
+           "value": pa.Column(float),
+           "double": pa.Column(
+               float,
+               metadata={"df-eval": {"expr": "2 * value"}},
+           ),
+       }
+   )
+
+   # Round-trip via YAML while preserving metadata
+   yaml_text = dump_pandera_schema_yaml(schema)
+   loaded = load_pandera_schema_yaml(yaml_text)
+
+   # df-eval expressions are preserved under metadata["df-eval"]["expr"]
+   expr_map = df_eval_schema_from_pandera(loaded)
+   assert expr_map == {"double": "2 * value"}
+
+The following helpers are available:
+
+* :func:`df_eval.pandera.load_pandera_schema_yaml` – load a Pandera
+  ``DataFrameSchema`` from YAML (path or string) with metadata preserved.
+* :func:`df_eval.pandera.dump_pandera_schema_yaml` – dump a Pandera
+  ``DataFrameSchema`` to YAML, including column metadata.
+* :func:`df_eval.pandera.load_pandera_schema_json` – load a schema from JSON.
+* :func:`df_eval.pandera.dump_pandera_schema_json` – dump a schema to JSON.
+
+These helpers require the optional Pandera IO dependencies; install them via:
+
+.. code-block:: bash
+
+   pip install "df-eval[pandera]"
