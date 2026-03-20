@@ -311,7 +311,7 @@ expression directly to a Pandera column:
 Pandera Schema IO with Metadata Preservation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Pandera currently has an open issue (:issue:`https://github.com/unionai-oss/pandera/issues/1301`)
+Pandera currently has an open issue (`https://github.com/unionai-oss/pandera/issues/1301 <https://github.com/unionai-oss/pandera/issues/1301>`_)
 where column ``metadata`` is not preserved when using its built-in YAML/JSON
 IO helpers. This is important for df-eval because column metadata is where
 we store df-eval expressions and other operation specs.
