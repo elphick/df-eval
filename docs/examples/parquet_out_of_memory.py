@@ -107,5 +107,3 @@ print(in_memory_result)
 # Remove temporary files created by this example.
 
 shutil.rmtree(temp_path, ignore_errors=True)
-
-
