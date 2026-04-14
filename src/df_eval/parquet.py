@@ -144,7 +144,7 @@ def write_parquet_row_chunks(
             if not isinstance(chunk, pd.DataFrame):
                 raise TypeError("chunks must contain pandas DataFrame values")
 
-            table = pa.Table.from_pandas(chunk, preserve_index=False)
+            table = pa.Table.from_pandas(chunk)
             if writer is None:
                 writer = pq.ParquetWriter(
                     str(parquet_output_path),
