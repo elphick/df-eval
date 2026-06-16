@@ -226,12 +226,10 @@ def df_eval_operations_from_pandera(
 
 
 def load_pandera_schema_yaml(source: str | Path) -> Any:
-    """Load a Pandera DataFrameSchema from YAML, preserving column metadata.
+    """Load a Pandera DataFrameSchema from YAML, preserving column and schema metadata.
 
-    This is a thin, public wrapper around df-eval's temporary fork of
-    ``pandera.io.pandas_io``. It exists to work around
-    https://github.com/unionai-oss/pandera/issues/1301, where column
-    ``metadata`` is not round-tripped by Pandera's YAML/JSON IO helpers.
+    Uses df-eval's own schema serialization, which preserves the ``metadata``
+    field at both the column and the dataframe level through a full IO round-trip.
 
     Args:
         source: Path to a YAML schema file or a YAML string.
@@ -246,12 +244,10 @@ def load_pandera_schema_yaml(source: str | Path) -> Any:
 
 
 def dump_pandera_schema_yaml(schema: Any, stream: str | Path | None = None) -> str | None:
-    """Dump a Pandera DataFrameSchema to YAML, preserving column metadata.
+    """Dump a Pandera DataFrameSchema to YAML, preserving column and schema metadata.
 
-    This uses df-eval's temporary fork of ``pandera.io.pandas_io`` so that
-    column ``metadata`` survives a full IO round-trip. Once Pandera fixes
-    https://github.com/unionai-oss/pandera/issues/1301, this helper may be
-    simplified to delegate directly to Pandera's built-in IO.
+    Uses df-eval's own schema serialization so that both column-level and
+    dataframe-level ``metadata`` survive a full IO round-trip.
 
     Args:
         schema: A Pandera SchemaModel/DataFrameModel class or DataFrameSchema.
@@ -268,7 +264,7 @@ def dump_pandera_schema_yaml(schema: Any, stream: str | Path | None = None) -> s
 
 
 def load_pandera_schema_json(source: str | Path) -> Any:
-    """Load a Pandera DataFrameSchema from JSON, preserving column metadata.
+    """Load a Pandera DataFrameSchema from JSON, preserving column and schema metadata.
 
     This mirrors :func:`load_pandera_schema_yaml` but for JSON input.
     """
@@ -279,7 +275,7 @@ def load_pandera_schema_json(source: str | Path) -> Any:
 
 
 def dump_pandera_schema_json(schema: Any, target: str | Path | None = None, **kwargs: Any) -> str | None:
-    """Dump a Pandera DataFrameSchema to JSON, preserving column metadata.
+    """Dump a Pandera DataFrameSchema to JSON, preserving column and schema metadata.
 
     Args:
         schema: A Pandera SchemaModel/DataFrameModel class or DataFrameSchema.

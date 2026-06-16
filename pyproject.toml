@@ -23,9 +23,8 @@ dependencies = [
 
 [project.optional-dependencies]
 pandera = [
-    "pandera[io]>=0.20.0",
-    "black>=23.0.0",
-    "frictionless>=4.0.0",
+    "pandera>=0.20.0",
+    "pyyaml>=6.0",
 ]
 parquet = [
     "pyarrow>=15.0.0",
