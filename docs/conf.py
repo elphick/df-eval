@@ -6,11 +6,14 @@ import sys
 # Add the src directory to the path
 sys.path.insert(0, os.path.abspath("../src"))
 
+import df_eval
+
 # -- Project information -----------------------------------------------------
 project = "df-eval"
 copyright = "2026, Greg Elphick"
 author = "Greg Elphick"
-release = "0.1.0"
+version = df_eval.__version__
+
 
 # -- General configuration ---------------------------------------------------
 extensions = [
@@ -51,7 +54,7 @@ html_theme_options = {
     "logo": {
         "image_light": "_static/branding/df-eval-icon-light.svg",
         "image_dark": "_static/branding/df-eval-icon-dark.svg",
-        "text": f"df-eval<br>({release})",  # shows version in the top-left
+        "text": f"df-eval<br>({version})",  # shows version in the top-left
 
     },
 }
