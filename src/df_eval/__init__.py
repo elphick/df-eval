@@ -5,7 +5,13 @@ This package provides tools for evaluating expressions on pandas DataFrames,
 supporting schema-driven derived columns and external lookups.
 """
 
-__version__ = "0.1.0"
+from importlib import metadata
+
+try:
+    __version__ = metadata.version('df_eval')
+except metadata.PackageNotFoundError:
+    # Package is not installed
+    pass
 
 from df_eval.engine import Engine, CycleDetectedError
 from df_eval.expr import Expression
