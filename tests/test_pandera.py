@@ -428,3 +428,152 @@ def test_pandera_schema_json_roundtrip_preserves_metadata():
     assert loaded.columns["value"].metadata == {"unit": "kg"}
     expr_map = df_eval_schema_from_pandera(loaded)
     assert expr_map == {"double": "2 * value"}
+
+
+def test_pandera_schema_yaml_roundtrip_preserves_dataframe_metadata():
+    """YAML schema IO should preserve metadata at the dataframe (schema) level."""
+    from df_eval.pandera import (
+        load_pandera_schema_yaml,
+        dump_pandera_schema_yaml,
+    )
+
+    schema = pa.DataFrameSchema(
+        {
+            "value": pa.Column(float, metadata={"unit": "kg"}),
+            "double": pa.Column(
+                float,
+                metadata={"df-eval": {"expr": "2 * value"}},
+            ),
+        },
+        metadata={"source": "sensor-1", "owner": "team-a"},
+        title="SensorReadings",
+        description="Sensor reading schema",
+    )
+
+    yaml_text = dump_pandera_schema_yaml(schema)
+    loaded = load_pandera_schema_yaml(yaml_text)
+
+    assert loaded.metadata == {"source": "sensor-1", "owner": "team-a"}
+    assert loaded.title == "SensorReadings"
+    assert loaded.description == "Sensor reading schema"
+    # Column metadata still preserved alongside schema metadata
+    assert loaded.columns["value"].metadata == {"unit": "kg"}
+    expr_map = df_eval_schema_from_pandera(loaded)
+    assert expr_map == {"double": "2 * value"}
+
+
+def test_pandera_schema_json_roundtrip_preserves_dataframe_metadata():
+    """JSON schema IO should preserve metadata at the dataframe (schema) level."""
+    from df_eval.pandera import (
+        load_pandera_schema_json,
+        dump_pandera_schema_json,
+    )
+
+    schema = pa.DataFrameSchema(
+        {
+            "value": pa.Column(float, metadata={"unit": "kg"}),
+            "double": pa.Column(
+                float,
+                metadata={"df-eval": {"expr": "2 * value"}},
+            ),
+        },
+        metadata={"source": "sensor-1", "owner": "team-a"},
+        title="SensorReadings",
+        description="Sensor reading schema",
+    )
+
+    json_text = dump_pandera_schema_json(schema)
+    loaded = load_pandera_schema_json(json_text)
+
+    assert loaded.metadata == {"source": "sensor-1", "owner": "team-a"}
+    assert loaded.title == "SensorReadings"
+    assert loaded.description == "Sensor reading schema"
+    assert loaded.columns["value"].metadata == {"unit": "kg"}
+    expr_map = df_eval_schema_from_pandera(loaded)
+    assert expr_map == {"double": "2 * value"}
+
+
+def test_pandera_schema_yaml_roundtrip_preserves_checks():
+    """YAML schema IO should preserve column checks through a full round-trip."""
+    from df_eval.pandera import (
+        load_pandera_schema_yaml,
+        dump_pandera_schema_yaml,
+    )
+
+    schema = pa.DataFrameSchema(
+        {
+            "score": pa.Column(
+                float,
+                checks=[pa.Check.ge(0), pa.Check.le(100)],
+                metadata={"df-eval": {"expr": "base * 10"}},
+            ),
+        }
+    )
+
+    yaml_text = dump_pandera_schema_yaml(schema)
+    loaded = load_pandera_schema_yaml(yaml_text)
+
+    check_names = {c.name for c in loaded.columns["score"].checks}
+    assert "greater_than_or_equal_to" in check_names
+    assert "less_than_or_equal_to" in check_names
+    assert loaded.columns["score"].metadata == {"df-eval": {"expr": "base * 10"}}
+
+
+def test_pandera_schema_yaml_roundtrip_file(tmp_path):
+    """YAML schema IO should correctly write to and read from a file path."""
+    from df_eval.pandera import (
+        load_pandera_schema_yaml,
+        dump_pandera_schema_yaml,
+    )
+
+    schema = pa.DataFrameSchema(
+        {
+            "value": pa.Column(float, metadata={"unit": "kg"}),
+            "double": pa.Column(
+                float,
+                metadata={"df-eval": {"expr": "2 * value"}},
+            ),
+        },
+        metadata={"source": "file-test"},
+    )
+
+    yaml_path = tmp_path / "schema.yaml"
+    result = dump_pandera_schema_yaml(schema, stream=yaml_path)
+    assert result is None  # writing to file returns None
+    assert yaml_path.exists()
+
+    loaded = load_pandera_schema_yaml(yaml_path)
+    assert loaded.metadata == {"source": "file-test"}
+    assert loaded.columns["value"].metadata == {"unit": "kg"}
+    expr_map = df_eval_schema_from_pandera(loaded)
+    assert expr_map == {"double": "2 * value"}
+
+
+def test_pandera_schema_json_roundtrip_file(tmp_path):
+    """JSON schema IO should correctly write to and read from a file path."""
+    from df_eval.pandera import (
+        load_pandera_schema_json,
+        dump_pandera_schema_json,
+    )
+
+    schema = pa.DataFrameSchema(
+        {
+            "value": pa.Column(float, metadata={"unit": "kg"}),
+            "double": pa.Column(
+                float,
+                metadata={"df-eval": {"expr": "2 * value"}},
+            ),
+        },
+        metadata={"source": "file-test"},
+    )
+
+    json_path = tmp_path / "schema.json"
+    result = dump_pandera_schema_json(schema, target=json_path)
+    assert result is None  # writing to file returns None
+    assert json_path.exists()
+
+    loaded = load_pandera_schema_json(json_path)
+    assert loaded.metadata == {"source": "file-test"}
+    assert loaded.columns["value"].metadata == {"unit": "kg"}
+    expr_map = df_eval_schema_from_pandera(loaded)
+    assert expr_map == {"double": "2 * value"}
