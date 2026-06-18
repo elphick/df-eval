@@ -81,3 +81,47 @@ def test_engine_apply_schema_does_not_modify_original():
     assert df.columns.tolist() == original_columns
     assert "b" not in df.columns
     assert "b" in result.columns
+
+
+def test_engine_evaluate_round_ceil_floor_expressions():
+    """Built-in rounding functions should work in expression evaluation."""
+    engine = Engine()
+    df = pd.DataFrame({"price": [1.234, 2.345, np.nan], "ratio": [1.2, 2.8, np.nan]})
+
+    rounded = engine.evaluate(df, "round(price, 2)")
+    ceiled = engine.evaluate(df, "ceil(ratio)")
+    floored = engine.evaluate(df, "floor(ratio)")
+
+    pd.testing.assert_series_equal(
+        rounded,
+        pd.Series([1.23, 2.35, np.nan]),
+        check_names=False,
+    )
+    pd.testing.assert_series_equal(
+        ceiled,
+        pd.Series([2.0, 3.0, np.nan]),
+        check_names=False,
+    )
+    pd.testing.assert_series_equal(
+        floored,
+        pd.Series([1.0, 2.0, np.nan]),
+        check_names=False,
+    )
+
+
+def test_engine_apply_schema_supports_decimals_spec():
+    """apply_schema should honor per-column decimals in mapping specs."""
+    engine = Engine()
+    df = pd.DataFrame({"price": [1.234, 2.345, np.nan]})
+    schema = {
+        "rounded_price": {"expr": "price", "decimals": 2},
+    }
+
+    result = engine.apply_schema(df, schema)
+
+    pd.testing.assert_series_equal(
+        result["rounded_price"],
+        pd.Series([1.23, 2.35, np.nan], name="rounded_price"),
+    )
+    assert str(result["rounded_price"].dtype) == "float64"
+

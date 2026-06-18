@@ -260,6 +260,24 @@ def test_df_eval_operations_from_pandera_extracts_kinds():
     assert ops["score"]["function"]["name"] == "dummy_fn"
 
 
+def test_df_eval_operations_from_pandera_extracts_decimals():
+    """Operations extraction should preserve optional decimals metadata."""
+    schema = pa.DataFrameSchema(
+        {
+            "base": pa.Column(float),
+            "rounded": pa.Column(
+                float,
+                metadata={"df-eval": {"expr": "base / 3", "decimals": 2}},
+            ),
+        }
+    )
+
+    from df_eval.pandera import df_eval_operations_from_pandera
+
+    ops = df_eval_operations_from_pandera(schema)
+    assert ops["rounded"]["decimals"] == 2
+
+
 def test_engine_pipeline_function_roundtrip():
     """Engine.register_pipeline_function can be used by metadata-driven ops."""
     schema = pa.DataFrameSchema(
@@ -375,6 +393,25 @@ def test_apply_pandera_schema_with_lookup_and_function_metadata():
     assert list(result["price"]) == [1.5, 0.75, 1.25]
     assert list(result["line_total"]) == [15.0, 15.0, 18.75]
     assert list(result["discounted_total"]) == [13.5, 13.5, 16.875]
+
+
+def test_apply_pandera_schema_applies_decimals_rounding():
+    """Pandera metadata decimals should round derived outputs in the pipeline."""
+    schema = pa.DataFrameSchema(
+        {
+            "price": pa.Column(float, coerce=True),
+            "taxed": pa.Column(
+                float,
+                coerce=True,
+                metadata={"df-eval": {"expr": "price * 1.075", "decimals": 2}},
+            ),
+        }
+    )
+    df = pd.DataFrame({"price": [10.111, 20.555]})
+
+    result = apply_pandera_schema(df, schema, validate=True, coerce=True, validate_post=True)
+
+    assert list(result["taxed"]) == [10.87, 22.1]
 
 
 def test_pandera_schema_yaml_roundtrip_preserves_metadata():

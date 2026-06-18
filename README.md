@@ -84,11 +84,25 @@ print(result)  # [5, 7, 9]
 schema = {
     "sum": "a + b",
     "product": "a * b",
-    "ratio": "a / b"
+    "ratio": "a / b",
+    "ratio_2dp": "round(a / b, 2)",
+    "ratio_bucket": "floor((a / b) * 10)"
 }
 
 df_with_derived = engine.apply_schema(df, schema)
 print(df_with_derived)
+```
+
+You can also use a mapping spec for richer per-column options, including
+`decimals` (rounding) and `alias` (rename from an incoming source column):
+
+```python
+schema = {
+    "price_2dp": {"expr": "price", "decimals": 2},
+    "price": {"alias": "legacy_price"},
+}
+
+rounded = engine.apply_schema(df, schema)
 ```
 
 ### Using Allow-Listed Safe Functions
@@ -126,6 +140,9 @@ The library provides several allow-listed safe functions:
 - `log(x)`: Natural logarithm (handles negative values safely)
 - `exp(x)`: Exponential function (handles overflow safely)
 - `sqrt(x)`: Square root (handles negative values safely)
+- `round(x, decimals=0)`: Round to a fixed number of decimal places
+- `ceil(x)`: Ceiling value
+- `floor(x)`: Floor value
 - `clip(x, min, max)`: Clip values to a range
 - `where(condition, x, y)`: Conditional selection
 - `isna(x)`: Check for NaN/None values
