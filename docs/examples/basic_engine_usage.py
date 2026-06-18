@@ -46,6 +46,9 @@ schema = {
     "product": "a * b",
     "ratio": "a / b",
     "safe_ratio": "safe_divide(a, b)",
+    "ratio_rounded": "round(a / b, 2)",
+    "ratio_ceiling": "ceil(a / b)",
+    "ratio_floor": "floor(a / b)",
 }
 
 df_with_derived = engine.apply_schema(df, schema)
@@ -67,6 +70,20 @@ typed_result = engine.apply_schema(
     dtypes={"float_sum": "float64", "int_product": "int32"},
 )
 typed_result.dtypes
+
+
+# %%
+# Schema Spec with ``decimals``
+# -----------------------------
+
+pricing_df = pd.DataFrame({"price": [12.3456, 99.9949, 0.3333]})
+
+rounding_schema = {
+    "price_2dp": {"expr": "price", "decimals": 2},
+}
+
+rounded_result = engine.apply_schema(pricing_df, rounding_schema)
+rounded_result
 
 
 # %%

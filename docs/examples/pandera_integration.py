@@ -52,7 +52,7 @@ schema = pa.DataFrameSchema(
         "double_weighted": pa.Column(
             float,
             coerce=True,
-            metadata={"df-eval": {"expr": "weighted * 2"}},
+            metadata={"df-eval": {"expr": "weighted * 2", "decimals": 2}},
         ),
     }
 )

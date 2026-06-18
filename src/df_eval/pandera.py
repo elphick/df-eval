@@ -157,6 +157,10 @@ def df_eval_operations_from_pandera(
         {"lookup": {"resolver": "prices", "key": "product"}}
         {"function": {"name": "churn_model_v1", "inputs": ["age"]}}
 
+    Any operation may also include an optional rounding directive::
+
+        {"expr": "price * quantity", "decimals": 2}
+
     The returned mapping has the shape::
 
         {
@@ -165,6 +169,7 @@ def df_eval_operations_from_pandera(
                 "expr": str | None,
                 "lookup": dict | None,
                 "function": dict | None,
+                "decimals": int | None,
             },
         }
     """
@@ -185,6 +190,12 @@ def df_eval_operations_from_pandera(
                 f"metadata['{meta_key}'] for column '{col_name}' must be a mapping"
             )
 
+        decimals = section.get("decimals")
+        if decimals is not None and not isinstance(decimals, int):
+            raise TypeError(
+                f"metadata['{meta_key}']['decimals'] for column '{col_name}' must be an integer"
+            )
+
         if "expr" in section:
             expr = section["expr"]
             if not isinstance(expr, str):
@@ -196,6 +207,7 @@ def df_eval_operations_from_pandera(
                 "expr": expr,
                 "lookup": None,
                 "function": None,
+                "decimals": decimals,
             }
         elif "lookup" in section:
             lookup_spec = section["lookup"]
@@ -208,6 +220,7 @@ def df_eval_operations_from_pandera(
                 "expr": None,
                 "lookup": dict(lookup_spec),
                 "function": None,
+                "decimals": decimals,
             }
         elif "function" in section:
             function_spec = section["function"]
@@ -220,6 +233,7 @@ def df_eval_operations_from_pandera(
                 "expr": None,
                 "lookup": None,
                 "function": dict(function_spec),
+                "decimals": decimals,
             }
 
     return ops
@@ -348,6 +362,9 @@ def apply_pandera_schema(
     ``{"expr": "a + b"}``
     ``{"lookup": {"resolver": "prices", "key": "product"}}``
     ``{"function": {"name": "my_fn", "inputs": ["a"], "outputs": ["y"]}}``
+
+    Any of the above can include ``"decimals": <int>`` to round the derived
+    output with df-eval's core ``round`` built-in.
 
     These are translated into an operations mapping consumed by
     :meth:`df_eval.engine.Engine.apply_operations`.

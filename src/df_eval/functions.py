@@ -107,6 +107,34 @@ def safe_fillna(value: Any, fill_value: Any) -> Any:
     return fill_value if pd.isna(value) else value
 
 
+def safe_round(value: Any, decimals: int = 0) -> Any:
+    """Round a scalar or Series to the requested decimal places."""
+    decimals = int(decimals)
+    if isinstance(value, pd.Series):
+        return value.round(decimals)
+    if pd.isna(value):
+        return value
+    return np.round(value, decimals)
+
+
+def safe_ceil(value: Any) -> Any:
+    """Ceiling function for scalars and Series."""
+    if isinstance(value, pd.Series):
+        return np.ceil(value)
+    if pd.isna(value):
+        return value
+    return np.ceil(value)
+
+
+def safe_floor(value: Any) -> Any:
+    """Floor function for scalars and Series."""
+    if isinstance(value, pd.Series):
+        return np.floor(value)
+    if pd.isna(value):
+        return value
+    return np.floor(value)
+
+
 # Dictionary of allow-listed safe functions available for expressions
 BUILTIN_FUNCTIONS: dict[str, Callable] = {
     "safe_divide": safe_divide,
@@ -121,4 +149,7 @@ BUILTIN_FUNCTIONS: dict[str, Callable] = {
     "where": safe_where,
     "isna": safe_isna,
     "fillna": safe_fillna,
+    "round": safe_round,
+    "ceil": safe_ceil,
+    "floor": safe_floor,
 }

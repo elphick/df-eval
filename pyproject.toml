@@ -1,6 +1,6 @@
 [project]
 name = "df-eval"
-version = "0.1.4"
+version = "0.2.0"
 description = "A lightweight expression evaluation engine for pandas DataFrames"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -18,6 +18,9 @@ from df_eval.parquet import iter_parquet_row_chunks, write_parquet_row_chunks
 from df_eval.lookup import Resolver, lookup as _lookup
 
 
+SchemaEntry = str | Expression | Dict[str, Any]
+
+
 class CycleDetectedError(Exception):
     """Raised when a cycle is detected in column dependencies."""
     pass
@@ -163,7 +166,7 @@ class Engine:
     def apply_schema(
         self,
         df: pd.DataFrame,
-        schema: Dict[str, str | Expression],
+        schema: Dict[str, SchemaEntry],
         dtypes: Optional[Dict[str, str]] = None
     ) -> pd.DataFrame:
         """
@@ -174,7 +177,8 @@ class Engine:
         
         Args:
             df: The input DataFrame.
-            schema: A dictionary mapping column names to expressions.
+            schema: A dictionary mapping column names to expressions or specs.
+                Spec format: {"expr": <expr>, "decimals": <int>}.
             dtypes: Optional dictionary mapping column names to dtypes.
             
         Returns:
@@ -193,12 +197,16 @@ class Engine:
         
         # Convert all to Expression objects and build dependency graph
         expr_objects: Dict[str, Expression] = {}
+        rounding: Dict[str, int] = {}
         for col_name, expr in schema.items():
-            if isinstance(expr, str):
-                expr_objects[col_name] = Expression(expr)
+            normalized_expr, decimals = self._normalize_schema_entry(col_name, expr)
+            if isinstance(normalized_expr, str):
+                expr_objects[col_name] = Expression(normalized_expr)
             else:
-                expr_objects[col_name] = expr
-        
+                expr_objects[col_name] = normalized_expr
+            if decimals is not None:
+                rounding[col_name] = decimals
+
         # Perform topological sort
         ordered_cols = self._topological_sort(expr_objects, set(result.columns))
         
@@ -206,8 +214,12 @@ class Engine:
         for col_name in ordered_cols:
             expr_obj = expr_objects[col_name]
             dtype = dtypes.get(col_name)
-            result[col_name] = self.evaluate(result, expr_obj, dtype=dtype)
-            
+            value = self.evaluate(result, expr_obj)
+            value = self._apply_rounding_if_requested(value, rounding.get(col_name))
+            if dtype is not None and isinstance(value, pd.Series):
+                value = value.astype(dtype)
+            result[col_name] = value
+
             # Track provenance
             if self._track_provenance:
                 result.attrs['df_eval_provenance'][col_name] = {
@@ -232,6 +244,7 @@ class Engine:
                 "expr": str | None,
                 "lookup": dict | None,
                 "function": dict | None,
+                "decimals": int | None,
             }
 
         This is intended to be used by higher-level integrations such as the
@@ -291,18 +304,71 @@ class Engine:
             if kind == "lookup":
                 lookup_spec = op.get("lookup") or {}
                 series = self._apply_lookup_operation(result, lookup_spec)
+                series = self._apply_rounding_if_requested(series, op.get("decimals"))
                 result[col_name] = series
 
             elif kind == "function":
                 func_spec = op.get("function") or {}
                 result = self._apply_pipeline_function(result, func_spec)
+                decimals = op.get("decimals")
+                if decimals is not None:
+                    if col_name not in result.columns:
+                        raise ValueError(
+                            f"Cannot apply 'decimals' for '{col_name}' because the "
+                            "function did not produce that output column"
+                        )
+                    result[col_name] = self._apply_rounding_if_requested(
+                        result[col_name],
+                        decimals,
+                    )
 
             elif kind == "expr":
                 expr_obj = expr_objects[col_name]
                 dtype = dtypes.get(col_name)
-                result[col_name] = self.evaluate(result, expr_obj, dtype=dtype)
+                value = self.evaluate(result, expr_obj)
+                value = self._apply_rounding_if_requested(value, op.get("decimals"))
+                if dtype is not None and isinstance(value, pd.Series):
+                    value = value.astype(dtype)
+                result[col_name] = value
 
         return result
+
+    def _normalize_schema_entry(self, col_name: str, expr: SchemaEntry) -> tuple[str | Expression, int | None]:
+        """Normalize apply_schema entries into (expression, decimals)."""
+        if isinstance(expr, (str, Expression)):
+            return expr, None
+
+        if isinstance(expr, dict):
+            expr_value = expr.get("expr")
+            if not isinstance(expr_value, (str, Expression)):
+                raise TypeError(
+                    f"schema['{col_name}']['expr'] must be a string or Expression"
+                )
+
+            decimals = expr.get("decimals")
+            if decimals is None:
+                return expr_value, None
+            if not isinstance(decimals, int):
+                raise TypeError(f"schema['{col_name}']['decimals'] must be an integer")
+            return expr_value, decimals
+
+        raise TypeError(
+            f"schema['{col_name}'] must be a string, Expression, or mapping"
+        )
+
+    def _apply_rounding_if_requested(self, value: Any, decimals: int | None) -> Any:
+        """Apply built-in round when a schema/metadata decimals value is provided."""
+        if decimals is None:
+            return value
+
+        if not isinstance(decimals, int):
+            raise TypeError("'decimals' must be an integer")
+
+        round_fn = self.functions.get("round")
+        if round_fn is None:
+            raise ValueError("Built-in function 'round' is not registered")
+
+        return round_fn(value, decimals)
 
     # ------------------------------------------------------------------
     # Metadata-driven pipeline helpers

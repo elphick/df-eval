@@ -2,7 +2,16 @@
 
 import pytest
 import numpy as np
-from df_eval.functions import safe_divide, coalesce, clip_value, BUILTIN_FUNCTIONS
+import pandas as pd
+from df_eval.functions import (
+    safe_divide,
+    coalesce,
+    clip_value,
+    safe_round,
+    safe_ceil,
+    safe_floor,
+    BUILTIN_FUNCTIONS,
+)
 
 
 def test_safe_divide_normal():
@@ -84,3 +93,43 @@ def test_builtin_functions_dict():
     assert callable(BUILTIN_FUNCTIONS["safe_divide"])
     assert callable(BUILTIN_FUNCTIONS["coalesce"])
     assert callable(BUILTIN_FUNCTIONS["clip"])
+    assert "round" in BUILTIN_FUNCTIONS
+    assert "ceil" in BUILTIN_FUNCTIONS
+    assert "floor" in BUILTIN_FUNCTIONS
+
+
+def test_safe_round_scalar_and_null():
+    """safe_round should support scalar numeric values and nulls."""
+    assert safe_round(12.3456, 2) == 12.35
+    assert safe_round(None, 2) is None
+    assert np.isnan(safe_round(np.nan, 2))
+
+
+def test_safe_round_series_preserves_nan_and_dtype():
+    """safe_round should be vectorized for Series and keep missing values."""
+    series = pd.Series([1.234, np.nan, 2.345], dtype="float64")
+    rounded = safe_round(series, 2)
+
+    expected = pd.Series([1.23, np.nan, 2.35], dtype="float64")
+    pd.testing.assert_series_equal(rounded, expected)
+
+
+def test_safe_ceil_and_floor_scalar_and_series():
+    """Ceil and floor should work for both scalars and Series."""
+    assert safe_ceil(1.2) == 2.0
+    assert safe_floor(1.8) == 1.0
+    assert safe_ceil(None) is None
+    assert np.isnan(safe_floor(np.nan))
+
+    series = pd.Series([1.1, np.nan, -1.1], dtype="float64")
+    ceiled = safe_ceil(series)
+    floored = safe_floor(series)
+
+    pd.testing.assert_series_equal(
+        ceiled,
+        pd.Series([2.0, np.nan, -1.0], dtype="float64"),
+    )
+    pd.testing.assert_series_equal(
+        floored,
+        pd.Series([1.0, np.nan, -2.0], dtype="float64"),
+    )
