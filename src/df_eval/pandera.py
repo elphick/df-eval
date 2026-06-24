@@ -109,16 +109,9 @@ def _validate_with_coerce(df_schema: Any, df: pd.DataFrame, coerce: bool) -> pd.
     return schema_copy.validate(df)
 
 
-def df_eval_schema_from_pandera(
-    schema: Any,
-    meta_key: str = "df-eval",
-    expr_key: str = "expr",
-) -> dict[str, str]:
-    """Build a df-eval schema mapping from Pandera per-column metadata."""
-    pa = _import_pandera()
-    df_schema = _to_dataframe_schema(schema, pa)
-
-    expr_map: dict[str, str] = {}
+def _iter_df_eval_sections(df_schema: Any, meta_key: str) -> list[tuple[str, Mapping[str, Any]]]:
+    """Return validated per-column df-eval metadata sections."""
+    sections: list[tuple[str, Mapping[str, Any]]] = []
     for col_name, col_schema in df_schema.columns.items():
         metadata = col_schema.metadata or {}
         if not isinstance(metadata, Mapping):
@@ -131,7 +124,66 @@ def df_eval_schema_from_pandera(
             raise TypeError(
                 f"metadata['{meta_key}'] for column '{col_name}' must be a mapping"
             )
+        sections.append((col_name, section))
+    return sections
 
+
+def _extract_aliases(
+    df_schema: Any,
+    *,
+    meta_key: str,
+) -> dict[str, str]:
+    """Build alias mapping of target column -> source column."""
+    aliases: dict[str, str] = {}
+    operation_keys = ("expr", "lookup", "function")
+    for col_name, section in _iter_df_eval_sections(df_schema, meta_key):
+        if "alias" not in section:
+            continue
+
+        alias = section["alias"]
+        if not isinstance(alias, str):
+            raise TypeError(
+                f"metadata['{meta_key}']['alias'] for column '{col_name}' must be a string"
+            )
+        if any(key in section for key in operation_keys):
+            raise ValueError(
+                f"metadata['{meta_key}'] for column '{col_name}' cannot define both "
+                "'alias' and an operation key ('expr', 'lookup', or 'function')"
+            )
+        aliases[col_name] = alias
+    return aliases
+
+
+def _extract_decimals(
+    df_schema: Any,
+    *,
+    meta_key: str,
+) -> dict[str, int]:
+    """Build decimals mapping for any column that defines transform rounding."""
+    decimals_map: dict[str, int] = {}
+    for col_name, section in _iter_df_eval_sections(df_schema, meta_key):
+        decimals = section.get("decimals")
+        if decimals is None:
+            continue
+        if not isinstance(decimals, int):
+            raise TypeError(
+                f"metadata['{meta_key}']['decimals'] for column '{col_name}' must be an integer"
+            )
+        decimals_map[col_name] = decimals
+    return decimals_map
+
+
+def df_eval_schema_from_pandera(
+    schema: Any,
+    meta_key: str = "df-eval",
+    expr_key: str = "expr",
+) -> dict[str, str]:
+    """Build a df-eval schema mapping from Pandera per-column metadata."""
+    pa = _import_pandera()
+    df_schema = _to_dataframe_schema(schema, pa)
+
+    expr_map: dict[str, str] = {}
+    for col_name, section in _iter_df_eval_sections(df_schema, meta_key):
         expr = section.get(expr_key)
         if expr is None:
             continue
@@ -177,19 +229,7 @@ def df_eval_operations_from_pandera(
     df_schema = _to_dataframe_schema(schema, pa)
 
     ops: dict[str, dict[str, Any]] = {}
-    for col_name, col_schema in df_schema.columns.items():
-        metadata = col_schema.metadata or {}
-        if not isinstance(metadata, Mapping):
-            continue
-
-        section = metadata.get(meta_key)
-        if section is None:
-            continue
-        if not isinstance(section, Mapping):
-            raise TypeError(
-                f"metadata['{meta_key}'] for column '{col_name}' must be a mapping"
-            )
-
+    for col_name, section in _iter_df_eval_sections(df_schema, meta_key):
         decimals = section.get("decimals")
         if decimals is not None and not isinstance(decimals, int):
             raise TypeError(
@@ -237,6 +277,75 @@ def df_eval_operations_from_pandera(
             }
 
     return ops
+
+
+def apply_aliases(
+    df: pd.DataFrame,
+    schema: Any,
+    meta_key: str = "df-eval",
+) -> pd.DataFrame:
+    """Apply alias transforms from Pandera metadata before operation evaluation."""
+    pa = _import_pandera()
+    df_schema = _to_dataframe_schema(schema, pa)
+    aliases = _extract_aliases(df_schema, meta_key=meta_key)
+
+    if not aliases:
+        return df
+
+    result = df.copy()
+    for target_col, source_col in aliases.items():
+        source_exists = source_col in result.columns
+        target_exists = target_col in result.columns
+
+        if target_exists and source_exists and target_col != source_col:
+            raise ValueError(
+                "input DataFrame contains both alias target and source columns: "
+                f"'{target_col}' and '{source_col}'"
+            )
+        if not target_exists and not source_exists:
+            raise ValueError(
+                f"cannot apply alias for '{target_col}': source column '{source_col}' is missing"
+            )
+        if not target_exists and source_exists:
+            result[target_col] = result[source_col]
+
+    return result
+
+
+def _apply_decimals_with_engine(
+    df: pd.DataFrame,
+    schema: Any,
+    *,
+    meta_key: str = "df-eval",
+    engine: Engine | None = None,
+) -> pd.DataFrame:
+    """Apply decimals transform to existing DataFrame columns only."""
+    pa = _import_pandera()
+    df_schema = _to_dataframe_schema(schema, pa)
+    decimals_map = _extract_decimals(df_schema, meta_key=meta_key)
+
+    if not decimals_map:
+        return df
+
+    result = df.copy()
+    eval_engine = engine or Engine()
+    for col_name, decimals in decimals_map.items():
+        if col_name not in result.columns:
+            continue
+        result[col_name] = eval_engine._apply_rounding_if_requested(
+            result[col_name],
+            decimals,
+        )
+    return result
+
+
+def apply_decimals(
+    df: pd.DataFrame,
+    schema: Any,
+    meta_key: str = "df-eval",
+) -> pd.DataFrame:
+    """Apply decimals transform to existing columns using Pandera metadata."""
+    return _apply_decimals_with_engine(df, schema, meta_key=meta_key)
 
 
 def load_pandera_schema_yaml(source: str | Path) -> Any:
@@ -350,46 +459,53 @@ def apply_pandera_schema(
     engine: Engine | None = None,
     error_on_overwrite: bool = True,
 ) -> pd.DataFrame:
-    """Validate with Pandera, apply df-eval operations, then optionally revalidate.
+    """Run the Pandera + df-eval pipeline and optionally post-validate.
 
-    Columns that define df-eval metadata under ``meta_key`` are considered derived
-    and are excluded from pre-validation. This allows input frames that do not yet
-    include derived columns.
+    Pipeline order:
 
-    The df-eval metadata for each column may currently define exactly one of the
+    1. pre-validate base input columns (excluding operation/alias targets)
+    2. apply alias transforms from metadata
+    3. apply decimals transforms for existing columns
+    4. apply df-eval operations
+    5. optional post-validation against the full schema
+
+    The df-eval metadata for each operation column may define one of the
     following keys:
 
     ``{"expr": "a + b"}``
     ``{"lookup": {"resolver": "prices", "key": "product"}}``
     ``{"function": {"name": "my_fn", "inputs": ["a"], "outputs": ["y"]}}``
 
-    Any of the above can include ``"decimals": <int>`` to round the derived
-    output with df-eval's core ``round`` built-in.
+    Any operation may include ``"decimals": <int>`` to round the derived
+    output. Transform-stage decimals are also supported for any column that
+    already exists by stage (3), including aliased base columns.
 
     These are translated into an operations mapping consumed by
     :meth:`df_eval.engine.Engine.apply_operations`.
     """
     pa = _import_pandera()
     df_schema = _to_dataframe_schema(schema, pa)
-
-    # Build a rich operations map (expr, lookup, function) from column metadata.
-    from df_eval.pandera import df_eval_operations_from_pandera
+    eval_engine = engine or Engine()
 
     operations = df_eval_operations_from_pandera(df_schema, meta_key=meta_key)
+    aliases = _extract_aliases(df_schema, meta_key=meta_key)
     derived_columns = set(operations)
+    pre_validation_excluded_columns = derived_columns.union(aliases.keys())
 
     validated_df = df
     if validate:
-        base_schema = _build_subset_schema(df_schema, derived_columns)
+        base_schema = _build_subset_schema(df_schema, pre_validation_excluded_columns)
         validated_df = _validate_with_coerce(base_schema, df, coerce=coerce)
-
-    # If there are no df-eval-driven columns, there is nothing for the engine to do.
-    # Mirror previous behaviour and skip post-validation in this case.
-    if not operations:
-        return validated_df
+    transformed_df = apply_aliases(validated_df, df_schema, meta_key=meta_key)
+    transformed_df = _apply_decimals_with_engine(
+        transformed_df,
+        df_schema,
+        meta_key=meta_key,
+        engine=eval_engine,
+    )
 
     if error_on_overwrite:
-        overlapping = derived_columns.intersection(validated_df.columns)
+        overlapping = derived_columns.intersection(transformed_df.columns)
         if overlapping:
             overlap_text = ", ".join(sorted(overlapping))
             raise ValueError(
@@ -397,8 +513,9 @@ def apply_pandera_schema(
                 f"metadata: {overlap_text}"
             )
 
-    eval_engine = engine or Engine()
-    result = eval_engine.apply_operations(validated_df, operations)
+    result = transformed_df
+    if operations:
+        result = eval_engine.apply_operations(transformed_df, operations)
 
     if validate and validate_post:
         result = _validate_with_coerce(df_schema, result, coerce=coerce)
@@ -455,6 +572,8 @@ def apply_pandera_schema_parquet_to_parquet(
 
 __all__ = [
     "df_eval_schema_from_pandera",
+    "apply_aliases",
+    "apply_decimals",
     "apply_pandera_schema",
     "apply_pandera_schema_parquet_to_parquet",
     "df_eval_operations_from_pandera",

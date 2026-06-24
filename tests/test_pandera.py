@@ -5,6 +5,8 @@ import pytest
 
 from df_eval.engine import Engine
 from df_eval.pandera import (
+    apply_aliases,
+    apply_decimals,
     apply_pandera_schema,
     apply_pandera_schema_parquet_to_parquet,
     df_eval_schema_from_pandera,
@@ -108,6 +110,52 @@ def test_apply_pandera_schema_rejects_overwrite_by_default():
         apply_pandera_schema(df, schema)
 
 
+def test_apply_aliases_maps_source_column_to_target():
+    """Alias transform should materialize missing target columns from source columns."""
+    schema = pa.DataFrameSchema(
+        {
+            "legacy_price": pa.Column(float),
+            "price": pa.Column(float, metadata={"df-eval": {"alias": "legacy_price"}}),
+        }
+    )
+    df = pd.DataFrame({"legacy_price": [10.111, 20.222]})
+
+    result = apply_aliases(df, schema)
+
+    assert list(result["price"]) == [10.111, 20.222]
+    assert list(result["legacy_price"]) == [10.111, 20.222]
+
+
+def test_apply_aliases_rejects_source_target_collision():
+    """Alias transform should fail when source and target are both present."""
+    schema = pa.DataFrameSchema(
+        {
+            "legacy_price": pa.Column(float),
+            "price": pa.Column(float, metadata={"df-eval": {"alias": "legacy_price"}}),
+        }
+    )
+    df = pd.DataFrame({"legacy_price": [10.0], "price": [9.0]})
+
+    with pytest.raises(ValueError, match="alias target and source columns"):
+        apply_aliases(df, schema)
+
+
+def test_apply_decimals_rounds_existing_columns_only():
+    """Decimals transform should round already-materialized columns only."""
+    schema = pa.DataFrameSchema(
+        {
+            "price": pa.Column(float, metadata={"df-eval": {"decimals": 1}}),
+            "taxed": pa.Column(float, metadata={"df-eval": {"expr": "price * 1.075", "decimals": 2}}),
+        }
+    )
+    df = pd.DataFrame({"price": [10.16, 20.54]})
+
+    result = apply_decimals(df, schema)
+
+    assert list(result["price"]) == [10.2, 20.5]
+    assert "taxed" not in result.columns
+
+
 def test_apply_pandera_schema_can_skip_post_validation():
     """Allow deriving columns without validating derived dtype constraints."""
     schema = pa.DataFrameSchema(
@@ -124,6 +172,31 @@ def test_apply_pandera_schema_can_skip_post_validation():
 
     with pytest.raises(pa.errors.SchemaError):
         apply_pandera_schema(df, schema, validate_post=True, coerce=False)
+
+
+def test_apply_pandera_schema_applies_aliases_and_decimals_before_expr():
+    """Alias and decimals transforms should run before expression operations."""
+    schema = pa.DataFrameSchema(
+        {
+            "legacy_price": pa.Column(float, coerce=True),
+            "price": pa.Column(
+                float,
+                coerce=True,
+                metadata={"df-eval": {"alias": "legacy_price", "decimals": 1}},
+            ),
+            "taxed": pa.Column(
+                float,
+                coerce=True,
+                metadata={"df-eval": {"expr": "price * 1.075"}},
+            ),
+        }
+    )
+    df = pd.DataFrame({"legacy_price": [10.16, 20.54]})
+
+    result = apply_pandera_schema(df, schema, validate=True, coerce=True, validate_post=True)
+
+    assert list(result["price"]) == [10.2, 20.5]
+    assert pytest.approx(list(result["taxed"])) == [10.965, 22.0375]
 
 
 def test_engine_apply_pandera_schema_matches_functional_helper():

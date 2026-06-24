@@ -9,6 +9,7 @@ Pipeline:
 
 - Input DataFrame
 - Pre-validation of input columns with Pandera
+- Transform stage (alias/decimals metadata)
 - Derived column evaluation with df-eval
 - Optional full-schema post-validation
 """
@@ -95,4 +96,3 @@ result_via_helper = apply_pandera_schema(
     validate_post=True,
 )
 result_via_helper
-
