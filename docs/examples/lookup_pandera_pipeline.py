@@ -121,11 +121,11 @@ engine.register_pipeline_function("apply_discount", apply_discount)
 # ``apply_pandera_schema`` will:
 #
 # - Pre-validate input columns (excluding derived ones)
+# - Apply metadata transforms (alias/decimals) before operations
 # - Apply df-eval-derived columns (including lookup + function steps)
 # - Optionally re-validate the full schema
 
 
 result = engine.apply_pandera_schema(df, schema, coerce=True, validate=True, validate_post=True)
 result
-
 

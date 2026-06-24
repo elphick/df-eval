@@ -279,9 +279,15 @@ df-eval integrates with `Pandera <https://pandera.readthedocs.io/>`_ to drive
 schema-based derived columns from Pandera ``DataFrameSchema`` objects or
 SchemaModel/DataFrameModel classes.
 
-The :mod:`df_eval.pandera` module understands per-column metadata and can
-translate it into df-eval operations. For example, you can attach a df-eval
-expression directly to a Pandera column:
+The :mod:`df_eval.pandera` module understands per-column metadata and runs a
+staged pipeline:
+
+1. pre-validate base input columns
+2. apply metadata-driven transforms (``alias`` then ``decimals``)
+3. apply df-eval operations (``expr`` / ``lookup`` / ``function``)
+4. post-validate against the full schema
+
+For example, you can attach a df-eval expression directly to a Pandera column:
 
 .. code-block:: python
 
