@@ -10,7 +10,9 @@ from df_eval.pandera import (
     apply_pandera_schema,
     apply_pandera_schema_parquet_to_parquet,
     df_eval_schema_from_pandera,
+    validate_df_eval_schema,
 )
+from df_eval.pandera import _classify_aliases, _extract_aliases
 from df_eval.parquet import iter_parquet_row_chunks
 
 pa = pytest.importorskip("pandera")
@@ -238,8 +240,11 @@ def test_engine_apply_pandera_schema_matches_functional_helper():
     assert list(via_engine["sum"]) == [14, 16]
 
 
-def test_apply_pandera_schema_parquet_to_parquet_plans_projection_and_order(monkeypatch, tmp_path):
-    """Pandera parquet helper should derive minimal inputs and ordered outputs."""
+def test_apply_pandera_schema_parquet_to_parquet_plans_projection_and_order(tmp_path):
+    """Pandera parquet helper should derive minimal inputs and produce ordered outputs."""
+    pa_arrow = pytest.importorskip("pyarrow")
+    pq_arrow = pytest.importorskip("pyarrow.parquet")
+
     schema = pa.DataFrameSchema(
         {
             "a": pa.Column(int),
@@ -248,26 +253,23 @@ def test_apply_pandera_schema_parquet_to_parquet_plans_projection_and_order(monk
         }
     )
 
-    captured: dict[str, object] = {}
-
-    def _capture(*args, **kwargs):
-        captured["input_columns"] = kwargs.get("input_columns")
-        captured["output_columns"] = kwargs.get("output_columns")
-        return tmp_path / "out.parquet"
-
-    engine = Engine()
-    monkeypatch.setattr(engine, "apply_schema_parquet_to_parquet", _capture)
-
-    result = apply_pandera_schema_parquet_to_parquet(
-        "input.parquet",
-        tmp_path / "out.parquet",
-        schema,
-        engine=engine,
+    input_df = pd.DataFrame({"extra": [9, 9], "b": [3, 4], "a": [1, 2]})
+    input_path = tmp_path / "in.parquet"
+    output_path = tmp_path / "out.parquet"
+    pq_arrow.write_table(
+        pa_arrow.Table.from_pandas(input_df, preserve_index=False), input_path
     )
 
-    assert result == tmp_path / "out.parquet"
-    assert captured["input_columns"] == ["a", "b"]
-    assert captured["output_columns"] == ["a", "b", "sum"]
+    result = apply_pandera_schema_parquet_to_parquet(
+        input_path,
+        output_path,
+        schema,
+    )
+
+    assert result == output_path
+    output_df = pd.read_parquet(output_path)
+    assert list(output_df.columns) == ["a", "b", "sum"]
+    assert list(output_df["sum"]) == [4, 6]
 
 
 def test_engine_apply_pandera_schema_parquet_to_parquet_writes_schema_order(tmp_path):
@@ -809,3 +811,446 @@ def test_apply_aliases_still_rejects_collision_after_fix():
 
     with pytest.raises(ValueError, match="alias target and source columns"):
         apply_aliases(df, schema)
+
+
+# ---------------------------------------------------------------------------
+# _classify_aliases unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_classify_aliases_rename():
+    """Single present source, absent target → RENAME."""
+    classified = _classify_aliases({"price": ["legacy_price"]}, {"legacy_price", "qty"})
+    assert classified["price"] == ("RENAME", "legacy_price")
+
+
+def test_classify_aliases_native():
+    """Target present, no source present → NATIVE."""
+    classified = _classify_aliases({"price": ["legacy_price"]}, {"price", "qty"})
+    assert classified["price"] == ("NATIVE", "")
+
+
+def test_classify_aliases_ambiguous_both_present():
+    """Target and source both present → AMBIGUOUS."""
+    classified = _classify_aliases(
+        {"price": ["legacy_price"]}, {"price", "legacy_price"}
+    )
+    assert classified["price"][0] == "AMBIGUOUS"
+    assert classified["price"][1] == "legacy_price"
+
+
+def test_classify_aliases_ambiguous_multiple_sources():
+    """Multiple sources present → AMBIGUOUS."""
+    classified = _classify_aliases(
+        {"price": ["legacy_price", "old_price"]},
+        {"legacy_price", "old_price"},
+    )
+    assert classified["price"][0] == "AMBIGUOUS"
+
+
+def test_classify_aliases_absent():
+    """Neither target nor any source present → ABSENT."""
+    classified = _classify_aliases({"price": ["legacy_price"]}, {"qty"})
+    assert classified["price"] == ("ABSENT", "")
+
+
+def test_classify_aliases_multi_source_single_match():
+    """First matching source among multiple candidates → RENAME."""
+    classified = _classify_aliases(
+        {"deposit_code": ["deposit", "dep"]},
+        {"dep", "qty"},
+    )
+    assert classified["deposit_code"] == ("RENAME", "dep")
+
+
+def test_classify_aliases_empty():
+    """Empty aliases dict returns empty result."""
+    assert _classify_aliases({}, {"a", "b"}) == {}
+
+
+# ---------------------------------------------------------------------------
+# _extract_aliases — list alias support
+# ---------------------------------------------------------------------------
+
+
+def test_extract_aliases_accepts_string():
+    """Single-string alias is converted to a single-element list internally."""
+    from df_eval.pandera import _extract_aliases, _to_dataframe_schema, _import_pandera
+
+    schema = pa.DataFrameSchema(
+        {
+            "legacy_price": pa.Column(float),
+            "price": pa.Column(
+                float, metadata={"df-eval": {"alias": "legacy_price"}}
+            ),
+        }
+    )
+    pa_inner = _import_pandera()
+    df_sch = _to_dataframe_schema(schema, pa_inner)
+    aliases = _extract_aliases(df_sch, meta_key="df-eval")
+    assert aliases == {"price": ["legacy_price"]}
+
+
+def test_extract_aliases_accepts_list():
+    """List alias is accepted and preserved."""
+    from df_eval.pandera import _extract_aliases, _to_dataframe_schema, _import_pandera
+
+    schema = pa.DataFrameSchema(
+        {
+            "deposit": pa.Column(float),
+            "dep": pa.Column(float),
+            "deposit_code": pa.Column(
+                float,
+                metadata={"df-eval": {"alias": ["deposit", "dep"]}},
+            ),
+        }
+    )
+    pa_inner = _import_pandera()
+    df_sch = _to_dataframe_schema(schema, pa_inner)
+    aliases = _extract_aliases(df_sch, meta_key="df-eval")
+    assert aliases == {"deposit_code": ["deposit", "dep"]}
+
+
+def test_extract_aliases_rejects_empty_list():
+    """Empty list alias raises ValueError."""
+    from df_eval.pandera import _extract_aliases, _to_dataframe_schema, _import_pandera
+
+    schema = pa.DataFrameSchema(
+        {
+            "price": pa.Column(float, metadata={"df-eval": {"alias": []}}),
+        }
+    )
+    pa_inner = _import_pandera()
+    df_sch = _to_dataframe_schema(schema, pa_inner)
+    with pytest.raises(ValueError, match="must not be empty"):
+        _extract_aliases(df_sch, meta_key="df-eval")
+
+
+def test_extract_aliases_rejects_non_string_in_list():
+    """List alias with non-string element raises TypeError."""
+    from df_eval.pandera import _extract_aliases, _to_dataframe_schema, _import_pandera
+
+    schema = pa.DataFrameSchema(
+        {
+            "legacy": pa.Column(float),
+            "price": pa.Column(float, metadata={"df-eval": {"alias": ["legacy", 42]}}),
+        }
+    )
+    pa_inner = _import_pandera()
+    df_sch = _to_dataframe_schema(schema, pa_inner)
+    with pytest.raises(TypeError, match="list must contain only strings"):
+        _extract_aliases(df_sch, meta_key="df-eval")
+
+
+# ---------------------------------------------------------------------------
+# apply_aliases — multi-source alias (list)
+# ---------------------------------------------------------------------------
+
+
+def test_apply_aliases_multi_source_first_match():
+    """Multi-source alias uses the first present candidate."""
+    schema = pa.DataFrameSchema(
+        {
+            "deposit": pa.Column(float),
+            "dep": pa.Column(float),
+            "deposit_code": pa.Column(
+                float,
+                metadata={"df-eval": {"alias": ["deposit", "dep"]}},
+            ),
+        }
+    )
+    df = pd.DataFrame({"dep": [1.0, 2.0]})
+    result = apply_aliases(df, schema)
+    assert list(result["deposit_code"]) == [1.0, 2.0]
+    assert list(result["dep"]) == [1.0, 2.0]  # source preserved
+
+
+def test_apply_aliases_multi_source_absent_skips_silently():
+    """Multi-source alias with no candidates skips silently."""
+    schema = pa.DataFrameSchema(
+        {
+            "deposit": pa.Column(float),
+            "dep": pa.Column(float),
+            "deposit_code": pa.Column(
+                float,
+                metadata={"df-eval": {"alias": ["deposit", "dep"]}},
+            ),
+        }
+    )
+    df = pd.DataFrame({"other": [1.0]})
+    result = apply_aliases(df, schema)
+    assert "deposit_code" not in result.columns
+
+
+def test_apply_aliases_multi_source_ambiguous_raises():
+    """Multi-source alias raises when more than one candidate is present."""
+    schema = pa.DataFrameSchema(
+        {
+            "deposit": pa.Column(float),
+            "dep": pa.Column(float),
+            "deposit_code": pa.Column(
+                float,
+                metadata={"df-eval": {"alias": ["deposit", "dep"]}},
+            ),
+        }
+    )
+    df = pd.DataFrame({"deposit": [1.0], "dep": [2.0]})
+    with pytest.raises(ValueError, match="alias target and source columns"):
+        apply_aliases(df, schema)
+
+
+# ---------------------------------------------------------------------------
+# apply_pandera_schema — multi-source alias end-to-end
+# ---------------------------------------------------------------------------
+
+
+def test_apply_pandera_schema_multi_source_alias_rename():
+    """Multi-source alias renames the matching candidate before validation."""
+    schema = pa.DataFrameSchema(
+        {
+            "deposit": pa.Column(float, coerce=True),
+            "dep": pa.Column(float, coerce=True),
+            "deposit_code": pa.Column(
+                float, coerce=True, metadata={"df-eval": {"alias": ["deposit", "dep"]}}
+            ),
+            "doubled": pa.Column(
+                float, coerce=True, metadata={"df-eval": {"expr": "deposit_code * 2"}}
+            ),
+        },
+        strict="filter",
+    )
+    df = pd.DataFrame({"dep": [5.0, 10.0]})
+    result = apply_pandera_schema(df, schema, validate=True, coerce=True, validate_post=True)
+    assert list(result["deposit_code"]) == [5.0, 10.0]
+    assert list(result["doubled"]) == [10.0, 20.0]
+
+
+def test_apply_pandera_schema_multi_source_alias_native():
+    """Multi-source alias is a no-op when target is already present."""
+    schema = pa.DataFrameSchema(
+        {
+            "deposit": pa.Column(float, coerce=True),
+            "dep": pa.Column(float, coerce=True),
+            "deposit_code": pa.Column(
+                float, coerce=True, metadata={"df-eval": {"alias": ["deposit", "dep"]}}
+            ),
+        },
+        strict="filter",
+    )
+    df = pd.DataFrame({"deposit_code": [7.0]})
+    result = apply_pandera_schema(df, schema, validate=True, coerce=True, validate_post=True)
+    assert list(result["deposit_code"]) == [7.0]
+
+
+def test_apply_pandera_schema_ambiguous_raises():
+    """AMBIGUOUS alias raises ValueError before any validation occurs."""
+    schema = pa.DataFrameSchema(
+        {
+            "legacy_price": pa.Column(float, coerce=True),
+            "price": pa.Column(
+                float, coerce=True, metadata={"df-eval": {"alias": "legacy_price"}}
+            ),
+        }
+    )
+    df = pd.DataFrame({"legacy_price": [10.0], "price": [9.0]})
+    with pytest.raises(ValueError, match="alias target and source columns"):
+        apply_pandera_schema(df, schema)
+
+
+# ---------------------------------------------------------------------------
+# validate_df_eval_schema — schema self-validation
+# ---------------------------------------------------------------------------
+
+
+def test_validate_df_eval_schema_passes_valid_schema():
+    """Valid schema with unique alias sources passes without raising."""
+    schema = pa.DataFrameSchema(
+        {
+            "legacy_price": pa.Column(float),
+            "price": pa.Column(float, metadata={"df-eval": {"alias": "legacy_price"}}),
+            "taxed": pa.Column(float, metadata={"df-eval": {"expr": "price * 1.075"}}),
+        }
+    )
+    validate_df_eval_schema(schema)  # should not raise
+
+
+def test_validate_df_eval_schema_rejects_self_alias():
+    """Schema where an alias target lists itself as a source raises ValueError."""
+    schema = pa.DataFrameSchema(
+        {
+            "price": pa.Column(float, metadata={"df-eval": {"alias": "price"}}),
+        }
+    )
+    with pytest.raises(ValueError, match="cannot list itself as a source"):
+        validate_df_eval_schema(schema)
+
+
+def test_validate_df_eval_schema_rejects_duplicate_source():
+    """Schema with two targets sharing the same alias source raises ValueError."""
+    schema = pa.DataFrameSchema(
+        {
+            "deposit": pa.Column(float),
+            "deposit_code": pa.Column(
+                float, metadata={"df-eval": {"alias": "deposit"}}
+            ),
+            "deposit_amount": pa.Column(
+                float, metadata={"df-eval": {"alias": "deposit"}}
+            ),
+        }
+    )
+    with pytest.raises(ValueError, match="alias sources must be unique"):
+        validate_df_eval_schema(schema)
+
+
+def test_validate_df_eval_schema_rejects_unknown_source():
+    """Schema with alias source not in schema columns raises ValueError."""
+    schema = pa.DataFrameSchema(
+        {
+            "price": pa.Column(float, metadata={"df-eval": {"alias": "nonexistent"}}),
+        }
+    )
+    with pytest.raises(ValueError, match="is not a column defined in the schema"):
+        validate_df_eval_schema(schema)
+
+
+def test_validate_df_eval_schema_rejects_alias_with_operation():
+    """Schema column combining alias and expr raises ValueError."""
+    schema = pa.DataFrameSchema(
+        {
+            "legacy": pa.Column(float),
+            "price": pa.Column(
+                float,
+                metadata={"df-eval": {"alias": "legacy", "expr": "legacy * 2"}},
+            ),
+        }
+    )
+    with pytest.raises(ValueError, match="cannot define both"):
+        validate_df_eval_schema(schema)
+
+
+def test_validate_df_eval_schema_passes_multi_source_aliases():
+    """Schema with multi-source aliases (list) passes when sources are unique."""
+    schema = pa.DataFrameSchema(
+        {
+            "deposit": pa.Column(float),
+            "dep": pa.Column(float),
+            "deposit_code": pa.Column(
+                float,
+                metadata={"df-eval": {"alias": ["deposit", "dep"]}},
+            ),
+        }
+    )
+    validate_df_eval_schema(schema)  # should not raise
+
+
+def test_validate_df_eval_schema_rejects_duplicate_multi_source():
+    """Shared source across multi-source lists raises ValueError."""
+    schema = pa.DataFrameSchema(
+        {
+            "deposit": pa.Column(float),
+            "deposit_code": pa.Column(
+                float, metadata={"df-eval": {"alias": ["deposit"]}}
+            ),
+            "deposit_amount": pa.Column(
+                float, metadata={"df-eval": {"alias": ["deposit"]}}
+            ),
+        }
+    )
+    with pytest.raises(ValueError, match="alias sources must be unique"):
+        validate_df_eval_schema(schema)
+
+
+# ---------------------------------------------------------------------------
+# Parquet path with aliases
+# ---------------------------------------------------------------------------
+
+
+def test_apply_pandera_schema_parquet_with_alias_rename(tmp_path):
+    """Parquet path should rename alias source columns per-chunk before evaluation."""
+    pa_arrow = pytest.importorskip("pyarrow")
+    pq_arrow = pytest.importorskip("pyarrow.parquet")
+
+    schema = pa.DataFrameSchema(
+        {
+            "legacy_price": pa.Column(float),
+            "price": pa.Column(float, metadata={"df-eval": {"alias": "legacy_price"}}),
+            "taxed": pa.Column(float, metadata={"df-eval": {"expr": "price * 1.075"}}),
+        }
+    )
+
+    # Parquet file uses the alias SOURCE name (legacy_price), not the target (price).
+    input_df = pd.DataFrame({"legacy_price": [10.0, 20.0]})
+    input_path = tmp_path / "alias_in.parquet"
+    output_path = tmp_path / "alias_out.parquet"
+    pq_arrow.write_table(
+        pa_arrow.Table.from_pandas(input_df, preserve_index=False), input_path
+    )
+
+    result_path = apply_pandera_schema_parquet_to_parquet(
+        input_path, output_path, schema, chunk_size=1
+    )
+
+    assert result_path == output_path
+    output_df = pd.read_parquet(output_path)
+    assert list(output_df.columns) == ["legacy_price", "price", "taxed"]
+    assert list(output_df["price"]) == [10.0, 20.0]
+    assert pytest.approx(list(output_df["taxed"])) == [10.75, 21.5]
+
+
+def test_apply_pandera_schema_parquet_with_native_alias(tmp_path):
+    """Parquet path should handle NATIVE aliases (target already in file)."""
+    pa_arrow = pytest.importorskip("pyarrow")
+    pq_arrow = pytest.importorskip("pyarrow.parquet")
+
+    schema = pa.DataFrameSchema(
+        {
+            "legacy_price": pa.Column(float),
+            "price": pa.Column(float, metadata={"df-eval": {"alias": "legacy_price"}}),
+            "taxed": pa.Column(float, metadata={"df-eval": {"expr": "price * 1.075"}}),
+        }
+    )
+
+    # Parquet file uses the alias TARGET name (price) directly.
+    input_df = pd.DataFrame({"price": [10.0, 20.0]})
+    input_path = tmp_path / "native_in.parquet"
+    output_path = tmp_path / "native_out.parquet"
+    pq_arrow.write_table(
+        pa_arrow.Table.from_pandas(input_df, preserve_index=False), input_path
+    )
+
+    result_path = apply_pandera_schema_parquet_to_parquet(
+        input_path, output_path, schema, chunk_size=1
+    )
+
+    assert result_path == output_path
+    output_df = pd.read_parquet(output_path)
+    assert "price" in output_df.columns
+    assert "taxed" in output_df.columns
+    assert list(output_df["price"]) == [10.0, 20.0]
+    assert pytest.approx(list(output_df["taxed"])) == [10.75, 21.5]
+
+
+def test_apply_pandera_schema_parquet_ambiguous_alias_raises(tmp_path):
+    """Parquet path should raise on AMBIGUOUS alias (both source and target present)."""
+    pa_arrow = pytest.importorskip("pyarrow")
+    pq_arrow = pytest.importorskip("pyarrow.parquet")
+
+    schema = pa.DataFrameSchema(
+        {
+            "legacy_price": pa.Column(float),
+            "price": pa.Column(float, metadata={"df-eval": {"alias": "legacy_price"}}),
+            "taxed": pa.Column(float, metadata={"df-eval": {"expr": "price * 1.075"}}),
+        }
+    )
+
+    input_df = pd.DataFrame({"legacy_price": [10.0], "price": [9.0]})
+    input_path = tmp_path / "ambiguous_in.parquet"
+    pq_arrow.write_table(
+        pa_arrow.Table.from_pandas(input_df, preserve_index=False), input_path
+    )
+
+    with pytest.raises(ValueError, match="alias target and source columns"):
+        apply_pandera_schema_parquet_to_parquet(
+            input_path, tmp_path / "out.parquet", schema
+        )
+
