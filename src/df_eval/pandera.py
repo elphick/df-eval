@@ -93,6 +93,27 @@ def _build_subset_schema(df_schema: Any, excluded_columns: set[str]) -> Any:
         return df_schema.__class__(columns=columns, **kwargs)
 
 
+def _optional_alias_sources_missing_from_df(
+    *,
+    aliases: Mapping[str, str],
+    schema_columns: set[str],
+    df_columns: set[str],
+) -> set[str]:
+    """Return alias source columns that should be optional for validation.
+
+    A source column becomes optional when its alias target is already present in
+    the DataFrame. This lets aliases behave as fallback mappings instead of
+    mandatory alternate names.
+    """
+    optional_sources: set[str] = set()
+    for target_col, source_col in aliases.items():
+        if source_col not in schema_columns or target_col == source_col:
+            continue
+        if target_col in df_columns and source_col not in df_columns:
+            optional_sources.add(source_col)
+    return optional_sources
+
+
 def _validate_with_coerce(df_schema: Any, df: pd.DataFrame, coerce: bool) -> pd.DataFrame:
     """Validate across Pandera versions with/without validate(..., coerce=...)."""
     try:
@@ -489,8 +510,16 @@ def apply_pandera_schema(
 
     operations = df_eval_operations_from_pandera(df_schema, meta_key=meta_key)
     aliases = _extract_aliases(df_schema, meta_key=meta_key)
+    schema_columns = set(df_schema.columns)
     derived_columns = set(operations)
     pre_validation_excluded_columns = derived_columns.union(aliases.keys())
+    pre_validation_excluded_columns.update(
+        _optional_alias_sources_missing_from_df(
+            aliases=aliases,
+            schema_columns=schema_columns,
+            df_columns=set(df.columns),
+        )
+    )
 
     validated_df = df
     if validate:
@@ -518,7 +547,13 @@ def apply_pandera_schema(
         result = eval_engine.apply_operations(transformed_df, operations)
 
     if validate and validate_post:
-        result = _validate_with_coerce(df_schema, result, coerce=coerce)
+        post_validation_excluded_columns = _optional_alias_sources_missing_from_df(
+            aliases=aliases,
+            schema_columns=schema_columns,
+            df_columns=set(result.columns),
+        )
+        post_validation_schema = _build_subset_schema(df_schema, post_validation_excluded_columns)
+        result = _validate_with_coerce(post_validation_schema, result, coerce=coerce)
 
     return result
 
