@@ -47,7 +47,7 @@ df-eval automatically detects circular dependencies and raises an error:
 
 .. code-block:: python
 
-   from df_eval.exceptions import CycleDetectedError
+   from df_eval import CycleDetectedError
 
    # This schema has a circular dependency
    schema = {
