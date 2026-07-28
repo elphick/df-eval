@@ -324,9 +324,10 @@ def apply_aliases(
                 f"'{target_col}' and '{source_col}'"
             )
         if not target_exists and not source_exists:
-            raise ValueError(
-                f"cannot apply alias for '{target_col}': source column '{source_col}' is missing"
-            )
+            # Alias does not apply to this DataFrame — skip silently.
+            # (target may be the native column name that was never aliased,
+            # or the alias is simply not relevant for this input)
+            continue
         if not target_exists and source_exists:
             result[target_col] = result[source_col]
 
@@ -520,6 +521,12 @@ def apply_pandera_schema(
             df_columns=set(df.columns),
         )
     )
+    # Re-include alias targets that are already the native column name so that
+    # strict: filter does not drop them during pre-validation
+    df_columns = set(df.columns)
+    for target_col, source_col in aliases.items():
+        if target_col in df_columns and source_col not in df_columns:
+            pre_validation_excluded_columns.discard(target_col)
 
     validated_df = df
     if validate:
