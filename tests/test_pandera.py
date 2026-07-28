@@ -140,6 +140,24 @@ def test_apply_aliases_rejects_source_target_collision():
         apply_aliases(df, schema)
 
 
+def test_apply_pandera_schema_allows_missing_alias_source_when_target_exists():
+    """Alias source should be optional when the target column is already provided."""
+    schema = pa.DataFrameSchema(
+        {
+            "legacy_price": pa.Column(float, coerce=True),
+            "price": pa.Column(float, coerce=True, metadata={"df-eval": {"alias": "legacy_price"}}),
+            "taxed": pa.Column(float, coerce=True, metadata={"df-eval": {"expr": "price * 1.075"}}),
+        }
+    )
+    df = pd.DataFrame({"price": [10.0, 20.0]})
+
+    result = apply_pandera_schema(df, schema, validate=True, coerce=True, validate_post=True)
+
+    assert list(result["price"]) == [10.0, 20.0]
+    assert pytest.approx(list(result["taxed"])) == [10.75, 21.5]
+    assert "legacy_price" not in result.columns
+
+
 def test_apply_decimals_rounds_existing_columns_only():
     """Decimals transform should round already-materialized columns only."""
     schema = pa.DataFrameSchema(
