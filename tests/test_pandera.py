@@ -705,3 +705,107 @@ def test_pandera_schema_json_roundtrip_file(tmp_path):
     assert loaded.columns["value"].metadata == {"unit": "kg"}
     expr_map = df_eval_schema_from_pandera(loaded)
     assert expr_map == {"double": "2 * value"}
+
+
+def test_apply_aliases_skips_silently_when_neither_source_nor_target_exists():
+    """Alias transform should skip silently when both source and target are missing.
+    
+    This is the correct behavior for optional aliases that may not apply to all DataFrames.
+    """
+    schema = pa.DataFrameSchema(
+        {
+            "legacy_price": pa.Column(float),
+            "price": pa.Column(float, metadata={"df-eval": {"alias": "legacy_price"}}),
+            "other_col": pa.Column(int),
+        }
+    )
+    df = pd.DataFrame({"other_col": [1, 2]})
+
+    # Should not raise, should skip silently
+    result = apply_aliases(df, schema)
+
+    assert list(result["other_col"]) == [1, 2]
+    assert "price" not in result.columns
+    assert "legacy_price" not in result.columns
+
+
+def test_apply_pandera_schema_with_strict_filter_and_native_alias_target():
+    """Regression test for alias bug: strict filter should preserve native alias targets.
+    
+    When an alias target (e.g., 'price') is the native column name in the DataFrame,
+    and an alias source (e.g., 'legacy_price') is not present, the schema validation
+    with strict='filter' should not drop the native column before apply_aliases runs.
+    
+    This test reproduces the exact scenario from the bug report.
+    """
+    schema = pa.DataFrameSchema(
+        {
+            "legacy_price": pa.Column(float, coerce=True),
+            "price": pa.Column(float, coerce=True, metadata={"df-eval": {"alias": "legacy_price"}}),
+            "taxed": pa.Column(float, coerce=True, metadata={"df-eval": {"expr": "price * 1.075"}}),
+        },
+        strict="filter"
+    )
+    df = pd.DataFrame({"price": [10.0, 20.0]})
+
+    result = apply_pandera_schema(df, schema, validate=True, coerce=True, validate_post=True)
+
+    assert list(result["price"]) == [10.0, 20.0]
+    assert pytest.approx(list(result["taxed"])) == [10.75, 21.5]
+    assert "legacy_price" not in result.columns
+
+
+def test_apply_pandera_schema_strict_filter_with_alias_source_not_target():
+    """Verify alias still works with strict filter when source column is provided."""
+    schema = pa.DataFrameSchema(
+        {
+            "legacy_price": pa.Column(float, coerce=True),
+            "price": pa.Column(float, coerce=True, metadata={"df-eval": {"alias": "legacy_price"}}),
+            "taxed": pa.Column(float, coerce=True, metadata={"df-eval": {"expr": "price * 1.075"}}),
+        },
+        strict="filter"
+    )
+    df = pd.DataFrame({"legacy_price": [10.0, 20.0]})
+
+    result = apply_pandera_schema(df, schema, validate=True, coerce=True, validate_post=True)
+
+    assert list(result["price"]) == [10.0, 20.0]
+    assert list(result["legacy_price"]) == [10.0, 20.0]
+    assert pytest.approx(list(result["taxed"])) == [10.75, 21.5]
+
+
+def test_apply_pandera_schema_strict_filter_with_multiple_aliases():
+    """Test strict filter with multiple aliases to ensure all are handled correctly."""
+    schema = pa.DataFrameSchema(
+        {
+            "centroid_x": pa.Column(float, coerce=True),
+            "centroid_y": pa.Column(float, coerce=True),
+            "x": pa.Column(float, coerce=True, metadata={"df-eval": {"alias": "centroid_x"}}),
+            "y": pa.Column(float, coerce=True, metadata={"df-eval": {"alias": "centroid_y"}}),
+            "distance": pa.Column(float, coerce=True, metadata={"df-eval": {"expr": "(x**2 + y**2)**0.5"}}),
+        },
+        strict="filter"
+    )
+    df = pd.DataFrame({"x": [3.0, 4.0], "y": [4.0, 3.0]})
+
+    result = apply_pandera_schema(df, schema, validate=True, coerce=True, validate_post=True)
+
+    assert list(result["x"]) == [3.0, 4.0]
+    assert list(result["y"]) == [4.0, 3.0]
+    assert pytest.approx(list(result["distance"])) == [5.0, 5.0]
+    assert "centroid_x" not in result.columns
+    assert "centroid_y" not in result.columns
+
+
+def test_apply_aliases_still_rejects_collision_after_fix():
+    """Verify that the fix still correctly rejects when both source and target exist."""
+    schema = pa.DataFrameSchema(
+        {
+            "legacy_price": pa.Column(float),
+            "price": pa.Column(float, metadata={"df-eval": {"alias": "legacy_price"}}),
+        }
+    )
+    df = pd.DataFrame({"legacy_price": [10.0], "price": [9.0]})
+
+    with pytest.raises(ValueError, match="alias target and source columns"):
+        apply_aliases(df, schema)
