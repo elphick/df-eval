@@ -160,6 +160,43 @@ def test_apply_pandera_schema_allows_missing_alias_source_when_target_exists():
     assert "legacy_price" not in result.columns
 
 
+def test_apply_pandera_schema_raises_for_missing_required_non_derived_column():
+    """Missing required non-derived columns must fail pre-validation."""
+    schema = pa.DataFrameSchema(
+        {
+            "a": pa.Column(int, coerce=True),
+            "required_input": pa.Column(int, coerce=True),
+            "double_a": pa.Column(
+                int,
+                coerce=True,
+                metadata={"df-eval": {"expr": "a * 2"}},
+            ),
+        }
+    )
+    df = pd.DataFrame({"a": [1, 2]})
+
+    with pytest.raises(pa.errors.SchemaError, match="required_input"):
+        apply_pandera_schema(df, schema, validate=True, coerce=True, validate_post=True)
+
+
+def test_apply_pandera_schema_raises_when_alias_target_and_source_are_missing():
+    """Alias target should not be silently excluded when both source and target are absent."""
+    schema = pa.DataFrameSchema(
+        {
+            "legacy_price": pa.Column(float, required=False, coerce=True),
+            "price": pa.Column(
+                float,
+                coerce=True,
+                metadata={"df-eval": {"alias": "legacy_price"}},
+            ),
+        }
+    )
+    df = pd.DataFrame({"other_col": [1.0, 2.0]})
+
+    with pytest.raises(pa.errors.SchemaError, match="price"):
+        apply_pandera_schema(df, schema, validate=True, coerce=True, validate_post=True)
+
+
 def test_apply_decimals_rounds_existing_columns_only():
     """Decimals transform should round already-materialized columns only."""
     schema = pa.DataFrameSchema(
@@ -1253,4 +1290,3 @@ def test_apply_pandera_schema_parquet_ambiguous_alias_raises(tmp_path):
         apply_pandera_schema_parquet_to_parquet(
             input_path, tmp_path / "out.parquet", schema
         )
-

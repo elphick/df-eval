@@ -656,8 +656,9 @@ def apply_pandera_schema(
     1. Classify aliases against the input DataFrame columns.
     2. Raise on AMBIGUOUS aliases; copy RENAME aliases (source → target) so that
        alias targets are present before Pandera sees the DataFrame.
-    3. Pre-validate base input columns (excluding derived columns and any schema
-       columns not yet present in the DataFrame).
+    3. Pre-validate base input columns (excluding derived columns not yet
+       present, plus alias source columns that are absent for optional alias
+       fallback behavior).
     4. Apply decimals transforms for existing columns.
     5. Apply df-eval operations.
     6. Optional post-validation against the full schema (excluding schema columns
@@ -698,11 +699,20 @@ def apply_pandera_schema(
         if kind == "RENAME":
             df_with_aliases[target_col] = df_with_aliases[source_col]
 
-    # Exclude from pre-validation: derived columns (not yet computed) and any
-    # schema columns still absent from the DataFrame after alias copying.
+    # Exclude from pre-validation:
+    # 1) derived columns that are not yet computed, and
+    # 2) missing alias *source* columns (alias targets remain required).
+    # This preserves optional alias-source behavior while ensuring missing
+    # non-derived schema columns still fail validation.
     df_with_aliases_cols = set(df_with_aliases.columns)
-    pre_validation_excluded_columns = derived_columns | {
-        col for col in schema_columns if col not in df_with_aliases_cols
+    missing_alias_sources = {
+        source_col
+        for source_cols in aliases.values()
+        for source_col in source_cols
+        if source_col in schema_columns and source_col not in df_with_aliases_cols
+    }
+    pre_validation_excluded_columns = missing_alias_sources | {
+        col for col in derived_columns if col not in df_with_aliases_cols
     }
 
     validated_df = df_with_aliases
