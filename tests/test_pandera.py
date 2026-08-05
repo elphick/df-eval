@@ -179,6 +179,41 @@ def test_apply_pandera_schema_raises_for_missing_required_non_derived_column():
         apply_pandera_schema(df, schema, validate=True, coerce=True, validate_post=True)
 
 
+def test_apply_pandera_schema_raises_for_missing_required_derived_output():
+    """Required derived outputs must still be enforced during post-validation."""
+    schema = pa.DataFrameSchema(
+        {
+            "a": pa.Column(int, coerce=True),
+            "b": pa.Column(
+                int,
+                coerce=True,
+                metadata={
+                    "df-eval": {
+                        "function": {
+                            "name": "passthrough",
+                            "inputs": ["a"],
+                            "outputs": ["c"],
+                        }
+                    }
+                },
+            ),
+        }
+    )
+    df = pd.DataFrame({"a": [1, 2]})
+    engine = Engine()
+    engine.register_pipeline_function("passthrough", lambda df_slice: df_slice["a"])
+
+    with pytest.raises(pa.errors.SchemaError, match="b"):
+        apply_pandera_schema(
+            df,
+            schema,
+            engine=engine,
+            validate=True,
+            coerce=True,
+            validate_post=True,
+        )
+
+
 def test_apply_pandera_schema_raises_when_alias_target_and_source_are_missing():
     """Alias target should not be silently excluded when both source and target are absent."""
     schema = pa.DataFrameSchema(
@@ -254,6 +289,59 @@ def test_apply_pandera_schema_applies_aliases_and_decimals_before_expr():
 
     assert list(result["price"]) == [10.2, 20.5]
     assert pytest.approx(list(result["taxed"])) == [10.965, 22.0375]
+
+
+def test_apply_pandera_schema_drop_helper_expr_column_preserves_schema_order():
+    """Dropped helper expr columns should feed downstream outputs but not appear in results."""
+    schema = pa.DataFrameSchema(
+        {
+            "a": pa.Column(int, coerce=True),
+            "b": pa.Column(int, coerce=True),
+            "helper": pa.Column(
+                int,
+                coerce=True,
+                metadata={"df-eval": {"expr": "a + b", "drop": True}},
+            ),
+            "total": pa.Column(
+                int,
+                coerce=True,
+                metadata={"df-eval": {"expr": "helper * 2"}},
+            ),
+        }
+    )
+    df = pd.DataFrame({"extra": [9, 8], "b": [3, 4], "a": [1, 2]})
+
+    result = apply_pandera_schema(df, schema, validate=True, coerce=True, validate_post=True)
+
+    assert list(result.columns) == ["a", "b", "total", "extra"]
+    assert list(result["total"]) == [8, 12]
+    assert "helper" not in result.columns
+
+
+def test_apply_pandera_schema_drop_pass_through_column_after_validation():
+    """Pass-through schema columns can be used by expressions and dropped at the end."""
+    schema = pa.DataFrameSchema(
+        {
+            "raw_value": pa.Column(
+                int,
+                coerce=True,
+                metadata={"df-eval": {"drop": True}},
+            ),
+            "offset": pa.Column(int, coerce=True),
+            "adjusted": pa.Column(
+                int,
+                coerce=True,
+                metadata={"df-eval": {"expr": "raw_value + offset"}},
+            ),
+        }
+    )
+    df = pd.DataFrame({"offset": [1, 2], "raw_value": [10, 20]})
+
+    result = apply_pandera_schema(df, schema, validate=True, coerce=True, validate_post=True)
+
+    assert list(result.columns) == ["offset", "adjusted"]
+    assert list(result["adjusted"]) == [11, 22]
+    assert "raw_value" not in result.columns
 
 
 def test_engine_apply_pandera_schema_matches_functional_helper():
@@ -341,6 +429,45 @@ def test_engine_apply_pandera_schema_parquet_to_parquet_writes_schema_order(tmp_
     assert list(output_df.columns) == ["a", "b", "sum", "scaled"]
     assert list(output_df["sum"]) == [4, 6]
     assert list(output_df["scaled"]) == [40, 60]
+
+
+def test_apply_pandera_schema_parquet_to_parquet_respects_drop_and_order(tmp_path):
+    """Parquet helper should omit dropped schema columns while preserving order."""
+    pa_arrow = pytest.importorskip("pyarrow")
+    pq_arrow = pytest.importorskip("pyarrow.parquet")
+
+    schema = pa.DataFrameSchema(
+        {
+            "a": pa.Column(int),
+            "b": pa.Column(int),
+            "helper": pa.Column(
+                int,
+                metadata={"df-eval": {"expr": "a + b", "drop": True}},
+            ),
+            "total": pa.Column(
+                int,
+                metadata={"df-eval": {"expr": "helper * 2"}},
+            ),
+        }
+    )
+
+    input_df = pd.DataFrame({"extra": [9, 9], "b": [3, 4], "a": [1, 2]})
+    input_path = tmp_path / "drop-in.parquet"
+    output_path = tmp_path / "drop-out.parquet"
+    pq_arrow.write_table(
+        pa_arrow.Table.from_pandas(input_df, preserve_index=False), input_path
+    )
+
+    result = apply_pandera_schema_parquet_to_parquet(
+        input_path,
+        output_path,
+        schema,
+    )
+
+    assert result == output_path
+    output_df = pd.read_parquet(output_path)
+    assert list(output_df.columns) == ["a", "b", "total"]
+    assert list(output_df["total"]) == [8, 12]
 
 
 def test_df_eval_operations_from_pandera_extracts_kinds():

@@ -105,6 +105,43 @@ schema = {
 rounded = engine.apply_schema(df, schema)
 ```
 
+### Pandera Metadata Integration
+
+With `df-eval[pandera]`, you can define df-eval operations directly in Pandera
+column metadata and run them with `apply_pandera_schema`.
+
+`drop=True` is useful for helper columns that must exist during evaluation but
+should not be returned in the final DataFrame.
+
+```python
+import pandas as pd
+import pandera.pandas as pa
+
+from df_eval import Engine
+
+schema = pa.DataFrameSchema(
+    {
+        "price": pa.Column(float, coerce=True),
+        "qty": pa.Column(int, coerce=True),
+        "subtotal": pa.Column(
+            float,
+            coerce=True,
+            metadata={"df-eval": {"expr": "price * qty", "drop": True}},
+        ),
+        "taxed_total": pa.Column(
+            float,
+            coerce=True,
+            metadata={"df-eval": {"expr": "subtotal * 1.1", "decimals": 2}},
+        ),
+    }
+)
+
+df = pd.DataFrame({"price": [10.0], "qty": [3]})
+result = Engine().apply_pandera_schema(df, schema)
+
+print(result.columns.tolist())  # ['price', 'qty', 'taxed_total']
+```
+
 ### Using Allow-Listed Safe Functions
 
 ```python

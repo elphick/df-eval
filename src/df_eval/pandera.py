@@ -233,6 +233,72 @@ def _extract_decimals(
     return decimals_map
 
 
+def _extract_drop_columns(
+    df_schema: Any,
+    *,
+    meta_key: str,
+) -> set[str]:
+    """Return schema columns marked for final-output suppression."""
+    drop_columns: set[str] = set()
+    for col_name, section in _iter_df_eval_sections(df_schema, meta_key):
+        drop = section.get("drop")
+        if drop is None:
+            continue
+        if not isinstance(drop, bool):
+            raise TypeError(
+                f"metadata['{meta_key}']['drop'] for column '{col_name}' must be a boolean"
+            )
+        if drop:
+            drop_columns.add(col_name)
+    return drop_columns
+
+
+def _build_post_validation_exclusions(
+    df_schema: Any,
+    *,
+    result_columns: set[str],
+    aliases: dict[str, list[str]],
+) -> set[str]:
+    """Return absent schema columns that should be excluded from post-validation."""
+    alias_source_columns = {
+        source_col
+        for source_cols in aliases.values()
+        for source_col in source_cols
+        if source_col in df_schema.columns
+    }
+    excluded_columns: set[str] = set()
+    for col_name, col_schema in df_schema.columns.items():
+        if col_name in result_columns:
+            continue
+        if not getattr(col_schema, "required", True) or col_name in alias_source_columns:
+            excluded_columns.add(col_name)
+    return excluded_columns
+
+
+def _build_final_output_columns(
+    result: pd.DataFrame,
+    *,
+    schema_column_order: list[str],
+    drop_columns: set[str],
+) -> list[str]:
+    """Return the final output column order after applying drop metadata."""
+    if not drop_columns:
+        return list(result.columns)
+
+    schema_column_set = set(schema_column_order)
+    schema_columns = [
+        col_name
+        for col_name in schema_column_order
+        if col_name in result.columns and col_name not in drop_columns
+    ]
+    extra_columns = [
+        col_name
+        for col_name in result.columns
+        if col_name not in schema_column_set and col_name not in drop_columns
+    ]
+    return schema_columns + extra_columns
+
+
 def validate_df_eval_schema(schema: Any, meta_key: str = "df-eval") -> None:
     """Validate the df-eval metadata embedded in a Pandera schema.
 
@@ -570,6 +636,7 @@ def _plan_pandera_parquet_projection(
     schema_output_columns = list(df_schema.columns)
     expr_map = df_eval_schema_from_pandera(df_schema, meta_key=meta_key, expr_key=expr_key)
     derived_columns = set(expr_map)
+    drop_columns = _extract_drop_columns(df_schema, meta_key=meta_key)
 
     aliases = _extract_aliases(df_schema, meta_key=meta_key)
 
@@ -635,6 +702,10 @@ def _plan_pandera_parquet_projection(
     else:
         output_columns = schema_output_columns
 
+    output_columns = [
+        col_name for col_name in output_columns if col_name not in drop_columns
+    ]
+
     return expr_map, input_columns, output_columns, copy_map
 
 
@@ -661,8 +732,10 @@ def apply_pandera_schema(
        fallback behavior).
     4. Apply decimals transforms for existing columns.
     5. Apply df-eval operations.
-    6. Optional post-validation against the full schema (excluding schema columns
-       still absent from the result).
+    6. Optional post-validation against the full schema, excluding only absent
+       optional columns and absent alias-source columns.
+    7. If any columns are marked ``drop=True``, remove them from the final output
+       using schema order.
 
     The df-eval metadata for each operation column may define one of:
 
@@ -679,6 +752,8 @@ def apply_pandera_schema(
 
     operations = df_eval_operations_from_pandera(df_schema, meta_key=meta_key)
     aliases = _extract_aliases(df_schema, meta_key=meta_key)
+    drop_columns = _extract_drop_columns(df_schema, meta_key=meta_key)
+    schema_column_order = list(df_schema.columns)
     schema_columns = set(df_schema.columns)
     derived_columns = set(operations)
 
@@ -742,15 +817,22 @@ def apply_pandera_schema(
 
     if validate and validate_post:
         result_cols = set(result.columns)
-        post_validation_excluded_columns = {
-            col for col in schema_columns if col not in result_cols
-        }
+        post_validation_excluded_columns = _build_post_validation_exclusions(
+            df_schema,
+            result_columns=result_cols,
+            aliases=aliases,
+        )
         post_validation_schema = _build_subset_schema(
             df_schema, post_validation_excluded_columns
         )
         result = _validate_with_coerce(post_validation_schema, result, coerce=coerce)
 
-    return result
+    final_output_columns = _build_final_output_columns(
+        result,
+        schema_column_order=schema_column_order,
+        drop_columns=drop_columns,
+    )
+    return result.loc[:, final_output_columns]
 
 
 def apply_pandera_schema_parquet_to_parquet(
