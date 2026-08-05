@@ -25,6 +25,8 @@ from df_eval.pandera import apply_pandera_schema
 # -------------------------------------------
 #
 # ``price`` is driven by a lookup spec that references a named resolver.
+# ``line_total`` is an intermediate helper column that is dropped from the
+# final output after it feeds the discount function.
 # ``discounted_total`` is driven by a generic function step that calls a
 # registered pipeline function.
 
@@ -47,7 +49,7 @@ schema = pa.DataFrameSchema(
         ),
         "line_total": pa.Column(
             float,
-            metadata={"df-eval": {"expr": "price * quantity"}},
+            metadata={"df-eval": {"expr": "price * quantity", "drop": True}},
         ),
         "discounted_total": pa.Column(
             float,
@@ -124,8 +126,8 @@ engine.register_pipeline_function("apply_discount", apply_discount)
 # - Apply metadata transforms (alias/decimals) before operations
 # - Apply df-eval-derived columns (including lookup + function steps)
 # - Optionally re-validate the full schema
+# - Drop helper columns marked ``drop=True`` from the returned DataFrame
 
 
 result = engine.apply_pandera_schema(df, schema, coerce=True, validate=True, validate_post=True)
 result
-

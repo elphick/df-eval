@@ -12,6 +12,7 @@ Pipeline:
 - Transform stage (alias/decimals metadata)
 - Derived column evaluation with df-eval
 - Optional full-schema post-validation
+- Final output filtering for helper columns marked with ``drop=True``
 """
 
 from pprint import pprint
@@ -47,7 +48,7 @@ schema = pa.DataFrameSchema(
         "weighted": pa.Column(
             float,
             coerce=True,
-            metadata={"df-eval": {"expr": "value * weight"}},
+            metadata={"df-eval": {"expr": "value * weight", "drop": True}},
             checks=pa.Check.ge(0),
         ),
         "double_weighted": pa.Column(
@@ -79,6 +80,8 @@ print(expr_map)
 # %%
 # Engine-first entry point
 # ------------------------
+# ``weighted`` is computed and validated, but omitted from the final result
+# because it is marked ``drop=True``.
 
 engine = Engine()
 result = engine.apply_pandera_schema(df, schema, coerce=True, validate=True, validate_post=True)
