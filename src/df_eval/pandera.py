@@ -253,6 +253,50 @@ def _extract_drop_columns(
     return drop_columns
 
 
+def _extract_ordered_categories(
+    df_schema: Any,
+    *,
+    meta_key: str,
+) -> dict[str, list[Any]]:
+    """Return ordered categorical declarations keyed by column name."""
+    ordered_categories: dict[str, list[Any]] = {}
+    for col_name, section in _iter_df_eval_sections(df_schema, meta_key):
+        ordered = section.get("ordered")
+        if ordered is None:
+            continue
+        if not isinstance(ordered, bool):
+            raise TypeError(
+                f"metadata['{meta_key}']['ordered'] for column '{col_name}' must be a boolean"
+            )
+        if not ordered:
+            continue
+
+        checks = getattr(df_schema.columns[col_name], "checks", None)
+        if checks is None:
+            check_iterable: tuple[Any, ...] = ()
+        elif isinstance(checks, (list, tuple)):
+            check_iterable = tuple(checks)
+        else:
+            check_iterable = (checks,)
+
+        categories: list[Any] | None = None
+        for check in check_iterable:
+            statistics = getattr(check, "statistics", None) or {}
+            allowed_values = statistics.get("allowed_values")
+            if allowed_values is not None:
+                categories = list(allowed_values)
+                break
+
+        if categories is None:
+            raise ValueError(
+                f"metadata['{meta_key}']['ordered'] for column '{col_name}' "
+                "requires a pandera Check.isin(...) so category order is unambiguous"
+            )
+
+        ordered_categories[col_name] = categories
+    return ordered_categories
+
+
 def _build_post_validation_exclusions(
     df_schema: Any,
     *,
@@ -538,6 +582,40 @@ def apply_decimals(
     return _apply_decimals_with_engine(df, schema, meta_key=meta_key)
 
 
+def _apply_ordered_categoricals(
+    df: pd.DataFrame,
+    schema: Any,
+    *,
+    meta_key: str = "df-eval",
+) -> pd.DataFrame:
+    """Recast columns declared as ordered categoricals in df-eval metadata."""
+    pa = _import_pandera()
+    df_schema = _to_dataframe_schema(schema, pa)
+    ordered_categories = _extract_ordered_categories(df_schema, meta_key=meta_key)
+
+    if not ordered_categories:
+        return df
+
+    result = df.copy()
+    for col_name, categories in ordered_categories.items():
+        if col_name not in result.columns:
+            continue
+        invalid_values = result.loc[
+            result[col_name].notna() & ~result[col_name].isin(categories),
+            col_name,
+        ]
+        if not invalid_values.empty:
+            invalid_text = ", ".join(map(str, pd.unique(invalid_values)))
+            raise ValueError(
+                f"column '{col_name}' contains values outside its ordered category list: "
+                f"{invalid_text}"
+            )
+        result[col_name] = result[col_name].astype(
+            pd.CategoricalDtype(categories=categories, ordered=True)
+        )
+    return result
+
+
 def load_pandera_schema_yaml(source: str | Path) -> Any:
     """Load a Pandera DataFrameSchema from YAML, preserving column and schema metadata.
 
@@ -734,7 +812,9 @@ def apply_pandera_schema(
     5. Apply df-eval operations.
     6. Optional post-validation against the full schema, excluding only absent
        optional columns and absent alias-source columns.
-    7. If any columns are marked ``drop=True``, remove them from the final output
+    7. Recast any columns marked ``ordered=True`` using the order declared by
+       their Pandera ``Check.isin(...)`` values.
+    8. If any columns are marked ``drop=True``, remove them from the final output
        using schema order.
 
     The df-eval metadata for each operation column may define one of:
@@ -826,6 +906,8 @@ def apply_pandera_schema(
             df_schema, post_validation_excluded_columns
         )
         result = _validate_with_coerce(post_validation_schema, result, coerce=coerce)
+
+    result = _apply_ordered_categoricals(result, df_schema, meta_key=meta_key)
 
     final_output_columns = _build_final_output_columns(
         result,

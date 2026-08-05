@@ -314,6 +314,30 @@ For example, you can attach a df-eval expression directly to a Pandera column:
    result = apply_pandera_schema(df, schema)
    print(result["sum"].tolist())  # [4, 6]
 
+Ordered Categoricals from Metadata
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When your Pandera schema comes from YAML, Pandera's schema format can preserve a
+categorical ``isin`` check but not the Python-only ``ordered=True`` flag. df-eval
+fills that gap with ``metadata["df-eval"]["ordered"]`` and uses the
+``Check.isin(...)`` declaration order as the categorical sort order in the final
+DataFrame.
+
+.. code-block:: yaml
+
+   temperature:
+    dtype: category
+    checks:
+      isin: [COLD, WARM, HOT]
+    metadata:
+      df-eval:
+        ordered: true
+
+After :func:`df_eval.pandera.apply_pandera_schema` runs, ``weath`` is recast to
+an ordered pandas categorical with categories ``["COLD", "WARM", "HOT"]``.
+If you set ``ordered: true`` without an ``isin`` check, df-eval raises
+``ValueError`` because the category order is ambiguous.
+
 Pandera Schema IO with Metadata Preservation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
