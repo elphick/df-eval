@@ -671,6 +671,73 @@ def test_apply_pandera_schema_applies_decimals_rounding():
     assert list(result["taxed"]) == [10.87, 22.1]
 
 
+def test_apply_pandera_schema_applies_ordered_categorical_from_isin_check():
+    """Ordered metadata should recast category columns using isin declaration order."""
+    schema = pa.DataFrameSchema(
+        {
+            "weath": pa.Column(
+                "category",
+                coerce=True,
+                checks=pa.Check.isin(["COLD", "WARM", "HOT"]),
+                metadata={"df-eval": {"ordered": True}},
+            ),
+        }
+    )
+    df = pd.DataFrame({"weath": ["HOT", "COLD", "WARM"]})
+
+    result = apply_pandera_schema(df, schema, validate=True, coerce=True, validate_post=True)
+
+    assert isinstance(result["weath"].dtype, pd.CategoricalDtype)
+    assert result["weath"].dtype.ordered is True
+    assert list(result["weath"].cat.categories) == ["COLD", "WARM", "HOT"]
+    assert list(result.sort_values("weath")["weath"]) == ["COLD", "WARM", "HOT"]
+
+
+def test_apply_pandera_schema_raises_for_ordered_without_isin_check():
+    """Ordered metadata should fail fast when no categorical order can be derived."""
+    schema = pa.DataFrameSchema(
+        {
+            "weath": pa.Column(
+                "category",
+                coerce=True,
+                metadata={"df-eval": {"ordered": True}},
+            ),
+        }
+    )
+    df = pd.DataFrame({"weath": ["HOT", "COLD", "WARM"]})
+
+    with pytest.raises(ValueError, match="requires a pandera Check.isin"):
+        apply_pandera_schema(df, schema, validate=True, coerce=True, validate_post=True)
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        None,
+        {"df-eval": {"ordered": False}},
+    ],
+)
+def test_apply_pandera_schema_preserves_unordered_categorical_behavior(metadata):
+    """False or absent ordered metadata should preserve existing unordered behavior."""
+    schema = pa.DataFrameSchema(
+        {
+            "weath": pa.Column(
+                "category",
+                coerce=True,
+                checks=pa.Check.isin(["COLD", "WARM", "HOT"]),
+                metadata=metadata,
+            ),
+        }
+    )
+    df = pd.DataFrame({"weath": ["HOT", "COLD", "WARM"]})
+
+    result = apply_pandera_schema(df, schema, validate=True, coerce=True, validate_post=True)
+
+    assert isinstance(result["weath"].dtype, pd.CategoricalDtype)
+    assert result["weath"].dtype.ordered is False
+    assert list(result["weath"]) == ["HOT", "COLD", "WARM"]
+
+
 def test_pandera_schema_yaml_roundtrip_preserves_metadata():
     """YAML schema IO should preserve column metadata, including df-eval keys."""
     from df_eval.pandera import (
@@ -697,6 +764,34 @@ def test_pandera_schema_yaml_roundtrip_preserves_metadata():
     # df-eval-specific metadata preserved and usable by our helpers
     expr_map = df_eval_schema_from_pandera(loaded)
     assert expr_map == {"double": "2 * value"}
+
+
+def test_pandera_schema_yaml_roundtrip_preserves_ordered_metadata():
+    """YAML schema IO should preserve ordered metadata and its isin category order."""
+    from df_eval.pandera import (
+        load_pandera_schema_yaml,
+        dump_pandera_schema_yaml,
+    )
+
+    schema = pa.DataFrameSchema(
+        {
+            "weath": pa.Column(
+                "category",
+                checks=pa.Check.isin(["COLD", "WARM", "HOT"]),
+                metadata={"df-eval": {"ordered": True}},
+            ),
+        }
+    )
+
+    yaml_text = dump_pandera_schema_yaml(schema)
+    loaded = load_pandera_schema_yaml(yaml_text)
+
+    assert loaded.columns["weath"].metadata == {"df-eval": {"ordered": True}}
+    assert loaded.columns["weath"].checks[0].statistics["allowed_values"] == [
+        "COLD",
+        "WARM",
+        "HOT",
+    ]
 
 
 def test_pandera_schema_json_roundtrip_preserves_metadata():

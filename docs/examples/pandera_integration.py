@@ -10,6 +10,7 @@ Pipeline:
 - Input DataFrame
 - Pre-validation of input columns with Pandera
 - Transform stage (alias/decimals metadata)
+- Ordered categorical restoration from metadata + ``Check.isin`` order
 - Derived column evaluation with df-eval
 - Optional full-schema post-validation
 - Final output filtering for helper columns marked with ``drop=True``
@@ -43,6 +44,12 @@ def _print_schema_preview(schema: pa.DataFrameSchema) -> None:
 
 schema = pa.DataFrameSchema(
     {
+        "temperature": pa.Column(
+            "category",
+            coerce=True,
+            checks=pa.Check.isin(["COLD", "WARM", "HOT"]),
+            metadata={"df-eval": {"ordered": True}},
+        ),
         "value": pa.Column(float, coerce=True),
         "weight": pa.Column(float, coerce=True),
         "weighted": pa.Column(
@@ -66,7 +73,13 @@ _print_schema_preview(schema)
 # ----------------
 # Input values are strings to demonstrate Pandera coercion.
 
-df = pd.DataFrame({"value": ["10", "20", "30"], "weight": ["0.5", "0.25", "0.1"]})
+df = pd.DataFrame(
+    {
+        "temperature": ["HOT", "COLD", "WARM"],
+        "value": ["10", "20", "30"],
+        "weight": ["0.5", "0.25", "0.1"],
+    }
+)
 df
 
 # %%
@@ -86,6 +99,14 @@ print(expr_map)
 engine = Engine()
 result = engine.apply_pandera_schema(df, schema, coerce=True, validate=True, validate_post=True)
 result
+
+# %%
+# Inspect ordered categorical output
+# ----------------------------------
+
+print(result["temperature"].dtype)
+print(result["temperature"].cat.categories.tolist())
+result.sort_values("temperature")[["temperature", "double_weighted"]]
 
 # %%
 # Equivalent functional helper
