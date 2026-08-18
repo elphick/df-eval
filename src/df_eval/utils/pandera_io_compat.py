@@ -4,6 +4,23 @@ Implements YAML/JSON round-trips for Pandera DataFrameSchema while preserving
 column- and dataframe-level metadata.  This module intentionally avoids
 ``pandera[io]``, ``pandera.schema_statistics``, and any other private Pandera
 internals so that only ``pandera`` (no extras) and ``pyyaml`` are required.
+
+## Compatibility with parq-utils
+
+Users migrating from ``elphick.pandera_utils.utils.pandera_io_pandas_io`` can
+use the ``serialize_schema()`` and ``deserialize_schema()`` aliases which are
+drop-in replacements. All existing function signatures remain compatible:
+
+    # Before (parq-utils)
+    from elphick.pandera_utils.utils.pandera_io_pandas_io import serialize_schema
+    schema_dict = serialize_schema(my_schema)
+
+    # After (df-eval)
+    from df_eval.utils.pandera_io_compat import serialize_schema
+    schema_dict = serialize_schema(my_schema)
+
+For file I/O, the higher-level functions ``to_yaml()``, ``from_yaml()``,
+``to_json()``, and ``from_json()`` are recommended.
 """
 from __future__ import annotations
 
@@ -345,3 +362,14 @@ def from_json(source: Any) -> Any:
     else:
         data = json.load(source)
     return schema_from_dict(data)
+
+
+# ---------------------------------------------------------------------------
+# Compatibility aliases for parq-utils migration
+# ---------------------------------------------------------------------------
+
+serialize_schema = schema_to_dict
+"""Alias for schema_to_dict. Provides compatibility for code migrating from parq-utils."""
+
+deserialize_schema = schema_from_dict
+"""Alias for schema_from_dict. Provides compatibility for code migrating from parq-utils."""
