@@ -2,6 +2,19 @@
 
 This module keeps Pandera support optional and layered on top of the core
 Engine API by translating Pandera column metadata into a df-eval schema map.
+
+## Schema Serialization
+
+This module also exports schema serialization functions from ``pandera_io_compat``
+for YAML/JSON round-trips with full metadata preservation:
+
+- ``serialize_schema()`` / ``deserialize_schema()`` — Convert DataFrameSchema
+  to/from dict (compatible with parq-utils migration)
+- ``to_yaml()`` / ``from_yaml()`` — YAML file I/O
+- ``to_json()`` / ``from_json()`` — JSON file I/O
+
+All functions preserve column-level and dataframe-level metadata without
+requiring pandera internals.
 """
 
 from __future__ import annotations
@@ -15,6 +28,14 @@ import pandas as pd
 
 from df_eval.engine import Engine
 from df_eval.expr import Expression
+from df_eval.utils.pandera_io_compat import (
+    serialize_schema,
+    deserialize_schema,
+    to_yaml,
+    from_yaml,
+    to_json,
+    from_json,
+)
 
 
 def _import_pandera() -> Any:
@@ -1011,4 +1032,10 @@ __all__ = [
     "dump_pandera_schema_yaml",
     "load_pandera_schema_json",
     "dump_pandera_schema_json",
+    "serialize_schema",
+    "deserialize_schema",
+    "to_yaml",
+    "from_yaml",
+    "to_json",
+    "from_json",
 ]
