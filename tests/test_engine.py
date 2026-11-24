@@ -125,3 +125,88 @@ def test_engine_apply_schema_supports_decimals_spec():
     )
     assert str(result["rounded_price"].dtype) == "float64"
 
+
+def test_engine_apply_operations_pipeline_function_preserves_input():
+    """Pipeline outputs should be assigned without modifying the input frame."""
+    engine = Engine()
+
+    def make_outputs(df_slice):
+        return pd.DataFrame(
+            {
+                "first": df_slice["value"] + 1,
+                "second": df_slice["value"] + 2,
+            },
+            index=df_slice.index,
+        )
+
+    engine.register_pipeline_function("make_outputs", make_outputs)
+    df = pd.DataFrame({"value": [1, 2], "wide": [10, 20]})
+    operations = {
+        "first": {
+            "kind": "function",
+            "function": {
+                "name": "make_outputs",
+                "inputs": ["value"],
+                "outputs": ["first", "second"],
+            },
+        }
+    }
+
+    result = engine.apply_operations(df, operations)
+
+    pd.testing.assert_frame_equal(
+        df,
+        pd.DataFrame({"value": [1, 2], "wide": [10, 20]}),
+    )
+    assert list(result["first"]) == [2, 3]
+    assert list(result["second"]) == [3, 4]
+    assert list(result.columns) == ["value", "wide", "first", "second"]
+
+
+def test_engine_pipeline_function_can_overwrite_existing_output_column():
+    """Pipeline assignment should not use merge's overlapping-column failure."""
+    engine = Engine()
+
+    def replace_value(df_slice):
+        return df_slice["value"] * 10
+
+    engine.register_pipeline_function("replace_value", replace_value)
+    df = pd.DataFrame({"value": [1, 2]})
+
+    result = engine._apply_pipeline_function(
+        df,
+        {"name": "replace_value", "inputs": ["value"], "outputs": ["value"]},
+    )
+
+    assert list(result["value"]) == [10, 20]
+
+
+@pytest.mark.parametrize(
+    ("operation", "data"),
+    [
+        (
+            {"kind": "expr", "expr": "value * 10"},
+            {"value": [1, 2]},
+        ),
+        (
+            {
+                "kind": "lookup",
+                "lookup": {
+                    "mapping": {"a": 10, "b": 20},
+                    "key": "key",
+                },
+            },
+            {"key": ["a", "b"]},
+        ),
+    ],
+)
+def test_engine_apply_operations_does_not_mutate_input(operation, data):
+    """All operation types should leave the supplier DataFrame unchanged."""
+    engine = Engine()
+    df = pd.DataFrame(data)
+    original = df.copy(deep=True)
+
+    result = engine.apply_operations(df, {"output": operation})
+
+    pd.testing.assert_frame_equal(df, original)
+    assert "output" in result.columns

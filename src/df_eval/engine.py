@@ -250,7 +250,7 @@ class Engine:
         This is intended to be used by higher-level integrations such as the
         Pandera helpers, which translate column metadata into this structure.
         """
-        result = df.copy()
+        result = df
         dtypes = dtypes or {}
 
         # Build Expression objects only for expr-kind operations so we can
@@ -305,7 +305,7 @@ class Engine:
                 lookup_spec = op.get("lookup") or {}
                 series = self._apply_lookup_operation(result, lookup_spec)
                 series = self._apply_rounding_if_requested(series, op.get("decimals"))
-                result[col_name] = series
+                result = result.assign(**{col_name: series})
 
             elif kind == "function":
                 func_spec = op.get("function") or {}
@@ -317,9 +317,13 @@ class Engine:
                             f"Cannot apply 'decimals' for '{col_name}' because the "
                             "function did not produce that output column"
                         )
-                    result[col_name] = self._apply_rounding_if_requested(
-                        result[col_name],
-                        decimals,
+                    result = result.assign(
+                        **{
+                            col_name: self._apply_rounding_if_requested(
+                                result[col_name],
+                                decimals,
+                            )
+                        }
                     )
 
             elif kind == "expr":
@@ -329,7 +333,7 @@ class Engine:
                 value = self._apply_rounding_if_requested(value, op.get("decimals"))
                 if dtype is not None and isinstance(value, pd.Series):
                     value = value.astype(dtype)
-                result[col_name] = value
+                result = result.assign(**{col_name: value})
 
         return result
 
@@ -419,7 +423,7 @@ class Engine:
                         f"columns but metadata specifies {len(outputs)} outputs"
                     )
                 result = result.set_axis(outputs, axis=1)
-            return df.join(result)
+            return df.assign(**{col: result[col] for col in result.columns})
 
         raise TypeError(
             f"Pipeline function '{name}' must return a Series or DataFrame, "

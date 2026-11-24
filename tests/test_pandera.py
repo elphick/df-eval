@@ -248,6 +248,16 @@ def test_apply_decimals_rounds_existing_columns_only():
     assert "taxed" not in result.columns
 
 
+def test_apply_decimals_without_metadata_returns_original_frame():
+    """The no-decimals path should avoid an unnecessary full-frame copy."""
+    schema = pa.DataFrameSchema({"price": pa.Column(float)})
+    df = pd.DataFrame({"price": [10.16, 20.54]})
+
+    result = apply_decimals(df, schema)
+
+    assert result is df
+
+
 def test_apply_pandera_schema_can_skip_post_validation():
     """Allow deriving columns without validating derived dtype constraints."""
     schema = pa.DataFrameSchema(
